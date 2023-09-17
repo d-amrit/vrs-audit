@@ -5,7 +5,7 @@ import constants
 
 
 class Advertiser:
-    def __init__(self, index, vrs, protected_domain=False, budget=100,
+    def __init__(self, index, vrs=None, protected_domain=False, budget=100,
                  male_mu=-2.4, female_mu=-2.4, male_sigma=0.84, female_sigma=0.84, diff=None):
 
         self.index = index

@@ -17,7 +17,6 @@ import copy
 from advertiser import Advertiser
 from user import User
 from auction import Auction
-from vrs import VarianceReductionSystem
 import utilities
 import constants
 
@@ -30,28 +29,20 @@ class Experiment:
     def __init__(self, random_state=0, auction_type='first',
                  advertiser_list=None, no_of_housing_advertisers=1, no_of_non_housing_advertisers=1,
                  housing_budget=100, non_housing_budget=1000,
+                 mu=None, sigma=None,
                  housing_value_mu=-4.4, housing_value_sigma=0.8,
                  non_housing_value_male_mu=-4.4, non_housing_value_male_sigma=0.8,
                  non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8, non_housing_diff=None,
-                 user_list=None, no_of_users=20_000, ad_slot_per_user=1, user_vrs_prob=None,
-                 calc_gender_var=True, calc_race_var=False, batch_size=10,
-                 use_noisy_bisg=False, adjust_down=False, mu=None, sigma=None):
+                 user_list=None, no_of_users=20_000, ad_slot_per_user=1, user_vrs_prob=None
+                 # TODO: Do we want to re-add VRS variables?
+                 # calc_gender_var=True, calc_race_var=False, use_noisy_bisg=False, adjust_down=False, batch_size=10,
+                 ):
         # Initializing random state for replication purposes.
         utilities.initialize_random_state(random_state)
 
-        assert auction_type in ['first', 'second'], 'Only first- and second-price auctions are supported.'
+        # See auction.py for definition of diff.
+        assert auction_type in ['first', 'second', 'diff'], 'Only {1st, 2nd}-price and diff auctions are supported.'
         self.auction_type = auction_type
-        self.batch_size = batch_size
-        self.adjust_down = adjust_down
-
-        # VRS System.
-        self.vrs = VarianceReductionSystem(
-            calc_gender_var=calc_gender_var,
-            calc_race_var=calc_race_var,
-            batch_size=batch_size,
-            use_noisy_bisg=use_noisy_bisg,
-            adjust_down=adjust_down
-        )
 
         # Advertisers
         self.no_of_housing_advertisers = no_of_housing_advertisers
@@ -68,7 +59,6 @@ class Experiment:
             self.housing_value_mu = housing_value_mu
             self.non_housing_value_male_mu = non_housing_value_male_mu
             self.non_housing_value_female_mu = non_housing_value_female_mu
-
         if sigma is not None:
             self.housing_value_sigma = sigma
             self.non_housing_value_male_sigma = sigma
@@ -101,18 +91,17 @@ class Experiment:
             housing = [
                 Advertiser(
                     index=i,
-                    vrs=self.vrs,
                     budget=self.housing_budget,
                     protected_domain=True,
                     male_mu=self.housing_value_mu,
                     female_mu=self.housing_value_mu,
                     male_sigma=self.housing_value_sigma,
                     female_sigma=self.housing_value_sigma
-            ) for i in range(self.no_of_housing_advertisers)]
+                ) for i in range(self.no_of_housing_advertisers)]
             non_housing = [
                 Advertiser(
                     index=i,
-                    vrs=self.vrs, budget=self.non_housing_budget,
+                    budget=self.non_housing_budget,
                     protected_domain=False,
                     male_mu=self.non_housing_value_male_mu,
                     female_mu=self.non_housing_value_female_mu,
@@ -162,25 +151,13 @@ class Experiment:
             self.target_race_count[user.race] += 1
             self.unique_users.add(user.index)
 
-    def update_winning_advertiser(self, user, vrs_winner, regular_winner):
+    def update_winning_advertiser(self, user, regular_winner):
         # Update amount spent by winner.
         self.advertiser_list[regular_winner['idx']].update_params_after_winning_ad_slot(
             amount_spent=regular_winner['price_paid'],
             update_vrs=False,
             user=user
         )
-
-        # For advertisers in protected domains, update VRS-related information. This is unnecessary otherwise.
-        _a = self.advertiser_list[vrs_winner['idx']]
-        if _a.protected_domain:
-            _a.update_params_after_winning_ad_slot(
-                amount_spent=vrs_winner['price_paid'],
-                update_vrs=True,
-                user=user,
-                target_gender_count=self.target_gender_count,
-                target_race_count=self.target_race_count,
-                total_no_of_users=len(self.unique_users)
-            )
 
     def simulate(self):
         for user_idx, user in enumerate(self.ad_slot_list):
@@ -191,33 +168,19 @@ class Experiment:
                 user=user,
                 auction_type=self.auction_type
             )
-            vrs_winner, regular_winner, bid_list, vrs_multiplier, vrs_random_coin = a.run()
+            regular_winner, bid_list = a.run()
 
             # Update winning advertiser.
-            self.update_winning_advertiser(user, vrs_winner, regular_winner)
+            self.update_winning_advertiser(user, regular_winner)
 
             # Save results ~ For some reasons without deepcopy, this wasn't saving correctly.
-            # housing_adv = self.advertiser_list[0]
             self.results.append({
                 'regular_winner': copy.deepcopy(regular_winner),
-                'bid_list': bid_list[:],
                 'user': user,
+                'bid_list': bid_list[:],
                 'advertiser_list': copy.deepcopy(self.advertiser_list[:]),
-                'user_index': user.index,
                 'target_race_count': copy.deepcopy(self.target_race_count),
                 'target_gender_count': copy.deepcopy(self.target_gender_count),
-
-                # 'vrs_winner': copy.deepcopy(vrs_winner),
-                # 'vrs_multiplier': vrs_multiplier,
-                # 'vrs_random_coin': vrs_random_coin,
-                # 'total_no_of_users': len(self.unique_users),
-                # 'vrs_ad_reach': len(housing_adv.unique_users_reached),
-                # 'race': user.race,
-                # 'race_count': copy.deepcopy(housing_adv.true_race_count),
-                # 'race_var_sign': copy.deepcopy(housing_adv.race_var_sign),
-                # 'gender': user.gender,
-                # 'gender_count': copy.deepcopy(housing_adv.gender_count),
-                # 'gender_var_sign': copy.deepcopy(housing_adv.gender_var_sign),
             })
 
             if self.check_if_all_housing_adv_have_spent_budget(regular_winner['idx']):
@@ -225,7 +188,7 @@ class Experiment:
 
     def check_if_all_housing_adv_have_spent_budget(self, idx):
         """
-        We end the experiment when every advertiser
+        We end the experiment when every housing advertiser has exhausted their budget.
         """
         if idx < len(self.housing_adv_budget_exhausted):
             _adv = self.advertiser_list[idx]
@@ -245,13 +208,13 @@ class Experiment:
             check_true_bid = result['regular_winner']['true_bid'] == _max_true_bid
             assert check_adj_bid and check_true_bid, f'Regular winner was incorrectly chosen in iteration {iteration}.'
 
-    def test_check_vrs_random_coin_implementation(self):
-        # TODO: Implement test for adjust down as well.
-        if not self.adjust_down:
-            for result in self.results:
-                housing_won_without_vrs = result['vrs_winner']['idx'] == result['regular_winner']['idx']
-                check_coin_value = result['vrs_random_coin'] <= constants.P_TOP
-                assert housing_won_without_vrs or check_coin_value
+    # def test_check_vrs_random_coin_implementation(self):
+    #     # TODO: Implement test for adjust down as well.
+    #     if not self.adjust_down:
+    #         for result in self.results:
+    #             housing_won_without_vrs = result['vrs_winner']['idx'] == result['regular_winner']['idx']
+    #             check_coin_value = result['vrs_random_coin'] <= constants.P_TOP
+    #             assert housing_won_without_vrs or check_coin_value
 
     def _get_list_of_idx_of_vrs_winner(self):
         # Get list of indices for ad slots that the housing advertiser won.
@@ -290,7 +253,8 @@ class Experiment:
 
     def test_results(self):
         self.test_check_if_regular_winner_was_correctly_calculated()
-        self.test_check_vrs_random_coin_implementation()
+        # TODO: Re-add
+        # self.test_check_vrs_random_coin_implementation()
         self.test_var_sign()
 
     def save_results(self, suffix=None):
@@ -305,27 +269,3 @@ class Experiment:
 
 if __name__ == '__main__':
     pass
-    """
-    _batch_size = 10
-    _vrs = VarianceReductionSystem(
-        calc_gender_var=True,
-        calc_race_var=False,
-        batch_size=_batch_size,
-        use_noisy_bisg=False,
-        adjust_down=False
-    )
-    _advertiser_list = [
-        Advertiser(index=0, vrs=_vrs, budget=100, protected_domain=True, male_mu=-2.8, female_mu=-2.8,
-                   male_sigma=0.84, female_sigma=0.84),
-        Advertiser(index=1, vrs=_vrs, budget=100, protected_domain=False, male_mu=-3.5, female_mu=-2.4,
-                   male_sigma=0.84, female_sigma=0.84),
-    ]
-    expt = Experiment(
-        advertiser_list=_advertiser_list,
-        no_of_users=4,
-        ad_slot_per_user=2,
-        batch_size=_batch_size
-    )
-    # expt.simulate()
-    # expt.save_results()
-    """
