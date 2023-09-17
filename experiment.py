@@ -1,0 +1,331 @@
+"""
+TODO:
+
+1. Hard-coding of mu-sigma
+
+WHAT? We would like to remove experiment hard-coding of mu/sigma, male/female mu mu/sigma. This should entirely be
+handled in the advertiser class. However, for the experiment to run, we do need to set those values.
+WHEN TO ADDRESS THIS? If and when we want (non-)housing advertisers to have different mu-sigma.
+"""
+import numpy as np
+import random
+import os
+import json
+import datetime
+import copy
+
+from advertiser import Advertiser
+from user import User
+from auction import Auction
+from vrs import VarianceReductionSystem
+import utilities
+import constants
+
+
+class Experiment:
+    """
+    1. To compare impressions vs users, we can create a original and fake index so we don't need to change the code.
+    """
+
+    def __init__(self, random_state=0, auction_type='first',
+                 advertiser_list=None, no_of_housing_advertisers=1, no_of_non_housing_advertisers=1,
+                 housing_budget=100, non_housing_budget=1000,
+                 housing_value_mu=-4.4, housing_value_sigma=0.8,
+                 non_housing_value_male_mu=-4.4, non_housing_value_male_sigma=0.8,
+                 non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8, non_housing_diff=None,
+                 user_list=None, no_of_users=20_000, ad_slot_per_user=1, user_vrs_prob=None,
+                 calc_gender_var=True, calc_race_var=False, batch_size=10,
+                 use_noisy_bisg=False, adjust_down=False, mu=None, sigma=None):
+        # Initializing random state for replication purposes.
+        utilities.initialize_random_state(random_state)
+
+        assert auction_type in ['first', 'second'], 'Only first- and second-price auctions are supported.'
+        self.auction_type = auction_type
+        self.batch_size = batch_size
+        self.adjust_down = adjust_down
+
+        # VRS System.
+        self.vrs = VarianceReductionSystem(
+            calc_gender_var=calc_gender_var,
+            calc_race_var=calc_race_var,
+            batch_size=batch_size,
+            use_noisy_bisg=use_noisy_bisg,
+            adjust_down=adjust_down
+        )
+
+        # Advertisers
+        self.no_of_housing_advertisers = no_of_housing_advertisers
+        self.no_of_non_housing_advertisers = no_of_non_housing_advertisers
+        self.housing_budget = housing_budget
+        self.non_housing_budget = non_housing_budget
+        self.non_housing_diff = non_housing_diff
+
+        if mu is not None:
+            self.housing_value_mu = mu
+            self.non_housing_value_male_mu = mu
+            self.non_housing_value_female_mu = mu
+        else:
+            self.housing_value_mu = housing_value_mu
+            self.non_housing_value_male_mu = non_housing_value_male_mu
+            self.non_housing_value_female_mu = non_housing_value_female_mu
+
+        if sigma is not None:
+            self.housing_value_sigma = sigma
+            self.non_housing_value_male_sigma = sigma
+            self.non_housing_value_female_sigma = sigma
+        else:
+            self.housing_value_sigma = housing_value_sigma
+            self.non_housing_value_male_sigma = non_housing_value_male_sigma
+            self.non_housing_value_female_sigma = non_housing_value_female_sigma
+
+        self.advertiser_list = self.get_advertiser_list(advertiser_list)
+        self.housing_adv_budget_exhausted = [i for i in range(no_of_housing_advertisers)]
+
+        # Unique users and ad slots.
+        self.user_vrs_prob = user_vrs_prob
+        self.user_list = self.get_user_list(user_list, no_of_users)
+        self.ad_slot_per_user = ad_slot_per_user
+        self.ad_slot_list = self.gen_ad_slot_list()
+
+        # Index of users that we have already seen. Count by protected characteristics.
+        self.unique_users = set()
+        self.target_gender_count = {i[0]: 0 for i in constants.GENDER}
+        self.target_race_count = {i[0]: 0 for i in constants.RACE}
+
+        self.results = []
+    
+    def get_advertiser_list(self, advertiser_list):
+        if advertiser_list is not None:
+            return advertiser_list
+        else:
+            housing = [
+                Advertiser(
+                    index=i,
+                    vrs=self.vrs,
+                    budget=self.housing_budget,
+                    protected_domain=True,
+                    male_mu=self.housing_value_mu,
+                    female_mu=self.housing_value_mu,
+                    male_sigma=self.housing_value_sigma,
+                    female_sigma=self.housing_value_sigma
+            ) for i in range(self.no_of_housing_advertisers)]
+            non_housing = [
+                Advertiser(
+                    index=i,
+                    vrs=self.vrs, budget=self.non_housing_budget,
+                    protected_domain=False,
+                    male_mu=self.non_housing_value_male_mu,
+                    female_mu=self.non_housing_value_female_mu,
+                    male_sigma=self.non_housing_value_male_sigma,
+                    female_sigma=self.non_housing_value_female_sigma,
+                    diff=self.non_housing_diff
+                ) for i in range(self.no_of_housing_advertisers, self.no_of_non_housing_advertisers + 1)
+            ]
+            advertiser_list = housing + non_housing
+            return advertiser_list
+
+    def get_user_list(self, user_list, no_of_users, create_equal_fraction=False):
+        if user_list is not None:
+            return user_list
+        elif no_of_users is not None:
+            if create_equal_fraction:
+                _gr = [(race, gender) for race in constants.RACE_NAMES for gender in constants.GENDER_NAMES]
+                no_of_copies = (no_of_users // len(_gr))
+                _user_list = [User(race=race, gender=gender, user_vrs_prob=self.user_vrs_prob)
+                              for race, gender in _gr
+                              for _ in range(no_of_copies)
+                              ]
+                for idx, u in enumerate(_user_list):
+                    u.index = idx
+                random.shuffle(_user_list)
+            else:
+                _user_list = [User(index=i, user_vrs_prob=self.user_vrs_prob) for i in range(no_of_users)]
+                if self.user_vrs_prob not in [1, None]:
+                    set_of_user_values = set([i.user_vrs_prob for i in _user_list])
+                    assert self.user_vrs_prob in set_of_user_values, 'User VRS probability has not been added to users.'
+            return _user_list
+        else:
+            raise utilities.CustomError('Please specify either user_list or no_of_users.')
+    
+    def gen_ad_slot_list(self):
+        """
+        TODO: Maybe we want to change this. Make number of ad slots a user sees to be a random variable?
+        What's the distribution?
+        """
+        ad_slot_list = self.user_list * self.ad_slot_per_user
+        random.shuffle(ad_slot_list)
+        return ad_slot_list
+        
+    def maintain_set_of_unique_users(self, user):
+        if user.index not in self.unique_users:
+            self.target_gender_count[user.gender] += 1
+            self.target_race_count[user.race] += 1
+            self.unique_users.add(user.index)
+
+    def update_winning_advertiser(self, user, vrs_winner, regular_winner):
+        # Update amount spent by winner.
+        self.advertiser_list[regular_winner['idx']].update_params_after_winning_ad_slot(
+            amount_spent=regular_winner['price_paid'],
+            update_vrs=False,
+            user=user
+        )
+
+        # For advertisers in protected domains, update VRS-related information. This is unnecessary otherwise.
+        _a = self.advertiser_list[vrs_winner['idx']]
+        if _a.protected_domain:
+            _a.update_params_after_winning_ad_slot(
+                amount_spent=vrs_winner['price_paid'],
+                update_vrs=True,
+                user=user,
+                target_gender_count=self.target_gender_count,
+                target_race_count=self.target_race_count,
+                total_no_of_users=len(self.unique_users)
+            )
+
+    def simulate(self):
+        for user_idx, user in enumerate(self.ad_slot_list):
+            self.maintain_set_of_unique_users(user)
+
+            a = Auction(
+                advertiser_list=self.advertiser_list,
+                user=user,
+                auction_type=self.auction_type
+            )
+            vrs_winner, regular_winner, bid_list, vrs_multiplier, vrs_random_coin = a.run()
+
+            # Update winning advertiser.
+            self.update_winning_advertiser(user, vrs_winner, regular_winner)
+
+            # Save results ~ For some reasons without deepcopy, this wasn't saving correctly.
+            # housing_adv = self.advertiser_list[0]
+            self.results.append({
+                'regular_winner': copy.deepcopy(regular_winner),
+                'bid_list': bid_list[:],
+                'user': user,
+                'advertiser_list': copy.deepcopy(self.advertiser_list[:]),
+                'user_index': user.index,
+                'target_race_count': copy.deepcopy(self.target_race_count),
+                'target_gender_count': copy.deepcopy(self.target_gender_count),
+
+                # 'vrs_winner': copy.deepcopy(vrs_winner),
+                # 'vrs_multiplier': vrs_multiplier,
+                # 'vrs_random_coin': vrs_random_coin,
+                # 'total_no_of_users': len(self.unique_users),
+                # 'vrs_ad_reach': len(housing_adv.unique_users_reached),
+                # 'race': user.race,
+                # 'race_count': copy.deepcopy(housing_adv.true_race_count),
+                # 'race_var_sign': copy.deepcopy(housing_adv.race_var_sign),
+                # 'gender': user.gender,
+                # 'gender_count': copy.deepcopy(housing_adv.gender_count),
+                # 'gender_var_sign': copy.deepcopy(housing_adv.gender_var_sign),
+            })
+
+            if self.check_if_all_housing_adv_have_spent_budget(regular_winner['idx']):
+                return
+
+    def check_if_all_housing_adv_have_spent_budget(self, idx):
+        """
+        We end the experiment when every advertiser
+        """
+        if idx < len(self.housing_adv_budget_exhausted):
+            _adv = self.advertiser_list[idx]
+            self.housing_adv_budget_exhausted[_adv] = _adv.amount_spent > _adv.budget
+        return all(self.housing_adv_budget_exhausted)
+
+    # --------------------------------------------------------------------------------------------------------------
+    # Test cases.
+    # --------------------------------------------------------------------------------------------------------------
+
+    def test_check_if_regular_winner_was_correctly_calculated(self):
+        for iteration, result in enumerate(self.results):
+            _bid_list = result['bid_list']
+            _max_adj_bid = max([i[0] for i in _bid_list])
+            check_adj_bid = result['regular_winner']['adj_bid'] == _max_adj_bid
+            _max_true_bid = max([i[1] for i in _bid_list])
+            check_true_bid = result['regular_winner']['true_bid'] == _max_true_bid
+            assert check_adj_bid and check_true_bid, f'Regular winner was incorrectly chosen in iteration {iteration}.'
+
+    def test_check_vrs_random_coin_implementation(self):
+        # TODO: Implement test for adjust down as well.
+        if not self.adjust_down:
+            for result in self.results:
+                housing_won_without_vrs = result['vrs_winner']['idx'] == result['regular_winner']['idx']
+                check_coin_value = result['vrs_random_coin'] <= constants.P_TOP
+                assert housing_won_without_vrs or check_coin_value
+
+    def _get_list_of_idx_of_vrs_winner(self):
+        # Get list of indices for ad slots that the housing advertiser won.
+        count = 0
+        idx_list = []
+        for idx, r in enumerate(self.results):
+            if r['vrs_winner']['idx'] == 0:
+                count += 1
+                if count % 10 == 0:
+                    idx_list.append(idx)
+        assert count > 0, 'VRS never changed the result of the auction. Something is wrong.'
+        return idx_list
+
+    @staticmethod
+    def test_individual_demographic_var_sign(results_dict, idx, demographic, demographic_name_list):
+        # Explicitly check that variance sign was correctly calculated.
+        t = utilities.convert_count_dict_to_list_of_perc(results_dict[f'target_{demographic}_count'])
+        a = utilities.convert_count_dict_to_list_of_perc(results_dict[f'{demographic}_count'])
+
+        _diff = np.array(a) - np.array(t)
+        _diff = np.where(_diff < 0)[0]
+        if _diff.size > 0:
+            underserved_demographic = demographic_name_list[_diff[0]]
+
+            assert results_dict[f'{demographic}_var_sign'][underserved_demographic] == -1, \
+                f'{demographic.title} variance is incorrectly assigned. Look at iteration {idx}'
+
+    def test_var_sign(self):
+        idx_list = self._get_list_of_idx_of_vrs_winner()
+        for idx in idx_list:
+            _d = self.results[idx]
+            self.test_individual_demographic_var_sign(results_dict=_d, idx=idx, demographic='gender',
+                                                      demographic_name_list=constants.GENDER_NAMES)
+            self.test_individual_demographic_var_sign(results_dict=_d, idx=idx, demographic='race',
+                                                      demographic_name_list=constants.RACE_NAMES)
+
+    def test_results(self):
+        self.test_check_if_regular_winner_was_correctly_calculated()
+        self.test_check_vrs_random_coin_implementation()
+        self.test_var_sign()
+
+    def save_results(self, suffix=None):
+        self.test_results()
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S:%f')
+        file_name = f'VRS_Audit_Experiment_Result_{timestamp}'
+        if suffix is not None:
+            file_name = f'{file_name}_{suffix}'
+        file_path = os.path.join(constants.SAVE_PATH, file_name)
+        open(f'{file_path}.json', 'w').write(json.dumps({'Results': self.results}))
+
+
+if __name__ == '__main__':
+    pass
+    """
+    _batch_size = 10
+    _vrs = VarianceReductionSystem(
+        calc_gender_var=True,
+        calc_race_var=False,
+        batch_size=_batch_size,
+        use_noisy_bisg=False,
+        adjust_down=False
+    )
+    _advertiser_list = [
+        Advertiser(index=0, vrs=_vrs, budget=100, protected_domain=True, male_mu=-2.8, female_mu=-2.8,
+                   male_sigma=0.84, female_sigma=0.84),
+        Advertiser(index=1, vrs=_vrs, budget=100, protected_domain=False, male_mu=-3.5, female_mu=-2.4,
+                   male_sigma=0.84, female_sigma=0.84),
+    ]
+    expt = Experiment(
+        advertiser_list=_advertiser_list,
+        no_of_users=4,
+        ad_slot_per_user=2,
+        batch_size=_batch_size
+    )
+    # expt.simulate()
+    # expt.save_results()
+    """
