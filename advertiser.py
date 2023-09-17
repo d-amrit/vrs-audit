@@ -6,11 +6,14 @@ import constants
 
 class Advertiser:
     def __init__(self, index, vrs=None, protected_domain=False, budget=100,
-                 male_mu=-2.4, female_mu=-2.4, male_sigma=0.84, female_sigma=0.84, diff=None):
+                 male_mu=-2.4, female_mu=-2.4, male_sigma=0.84, female_sigma=0.84, diff=None,
+                 est_action_rate=1, quality_score=0):
 
         self.index = index
         self.protected_domain = protected_domain
         self.budget = budget
+        self.est_action_rate = est_action_rate
+        self.quality_score = quality_score
 
         self.vrs = vrs
 
@@ -65,44 +68,6 @@ class Advertiser:
             raise utilities.CustomError(f"Gender {user.gender} not supported. Please use 'Male' or 'Female'.")
 
         return bid
-
-    def calc_bid(self, user):
-        """
-        GOAL: Ensure user-based bid doesn't exceed budget.
-        
-        WARNING!
-        
-        vrs_amount_spent >= amount_spent since due to the VRS multiplier we may win slots we wouldn't 
-        ordinarily win. Therefore, it is possible we run out of budget with VRS earlier than we would without VRS.
-        Changing the code to handle this is extremely cumbersome. So we are going to keep this in mind downstream.
-        """
-        user_based_bid = self.calc_user_based_bid(user)
-
-        # TODO: We handle this downstream by ensuring we only count upto the budget.
-        # amount_left = self.budget - self.amount_spent
-        # bid = min(amount_left, user_based_bid)
-
-        bid = user_based_bid
-
-        vrs_multiplier = self.vrs.calc_vrs_multiplier(
-            user=user,
-            protected_domain=self.protected_domain,
-            vrs_ad_reach=len(self.unique_users_reached),
-            gender_var_sign=self.gender_var_sign,
-            race_var_sign=self.race_var_sign
-        )
-
-        if self.protected_domain:
-            # TODO: We possibly need to adjust this to account for voting between race and gender.
-            # self.test_that_vrs_multiplier_works(vrs_multiplier, self.gender_var_sign, user.gender)
-
-            # REVIEW: This is our decision choice. We think you should care about ad reach instead of ad impressions.
-            # However, in fairness to Meta, they shouldn't bid up/down on a user they've seen before. This would force
-            # them to lose revenue based on a change we proposed.
-            if user.index in self.unique_users_reached:
-                vrs_multiplier = 1
-
-        return bid, vrs_multiplier
 
     @staticmethod
     def test_that_vrs_multiplier_works(vrs_multiplier, var_sign_dict, demographic):

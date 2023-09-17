@@ -41,7 +41,8 @@ class Experiment:
         utilities.initialize_random_state(random_state)
 
         # See auction.py for definition of diff.
-        assert auction_type in ['first', 'second', 'diff'], 'Only {1st, 2nd}-price and diff auctions are supported.'
+        assert auction_type in constants.SUPPORTED_AUCTION_TYPES, 'Only {1st, 2nd}-price and diff auctions are ' \
+                                                                  'supported.'
         self.auction_type = auction_type
 
         # Advertisers
@@ -183,6 +184,7 @@ class Experiment:
                 'target_gender_count': copy.deepcopy(self.target_gender_count),
             })
 
+            # Only the winning advertiser's status could have changed so we check only their status.
             if self.check_if_all_housing_adv_have_spent_budget(regular_winner['idx']):
                 return
 
@@ -202,19 +204,12 @@ class Experiment:
     def test_check_if_regular_winner_was_correctly_calculated(self):
         for iteration, result in enumerate(self.results):
             _bid_list = result['bid_list']
-            _max_adj_bid = max([i[0] for i in _bid_list])
-            check_adj_bid = result['regular_winner']['adj_bid'] == _max_adj_bid
+            _max_total_score = max([i[0] for i in _bid_list])
+            check_total_score = result['regular_winner']['total_score'] == _max_total_score
             _max_true_bid = max([i[1] for i in _bid_list])
             check_true_bid = result['regular_winner']['true_bid'] == _max_true_bid
-            assert check_adj_bid and check_true_bid, f'Regular winner was incorrectly chosen in iteration {iteration}.'
-
-    # def test_check_vrs_random_coin_implementation(self):
-    #     # TODO: Implement test for adjust down as well.
-    #     if not self.adjust_down:
-    #         for result in self.results:
-    #             housing_won_without_vrs = result['vrs_winner']['idx'] == result['regular_winner']['idx']
-    #             check_coin_value = result['vrs_random_coin'] <= constants.P_TOP
-    #             assert housing_won_without_vrs or check_coin_value
+            assert check_total_score and check_true_bid, f'Regular winner was incorrectly chosen in ' \
+                                                         f'iteration {iteration}.'
 
     def _get_list_of_idx_of_vrs_winner(self):
         # Get list of indices for ad slots that the housing advertiser won.

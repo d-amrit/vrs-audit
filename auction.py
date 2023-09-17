@@ -1,6 +1,7 @@
 import random
 
 import constants
+import utilities
 
 
 class Auction:
@@ -21,124 +22,109 @@ class Auction:
 
     @staticmethod
     def calc_est_action_rate(advertiser):
-        """
         # TODO: Implement.
-        This is going to be used in the auction calculation.
-        """
-        return 1
+        return advertiser.est_action_rate
 
     @staticmethod
-    def calc_quality_bid(advertiser):
-        """
+    def calc_quality_score(advertiser):
         # TODO: Implement.
-        This is going to be used in the auction calculation.
-        """
-        return 0
+        return advertiser.quality_score
 
     def calc_bid_for_each_advertiser(self, advertiser):
         # Calculated by the platform but dependent on advertiser inputs (e.g. budget).
-        true_bid, vrs_multiplier = advertiser.calc_bid(self.user)
+        true_bid = advertiser.calc_user_based_bid(self.user)
 
         # Calculated by the platform.
-        quality_bid = self.calc_quality_bid(advertiser)
+        quality_bid = self.calc_quality_score(advertiser)
         est_action_rate = self.calc_est_action_rate(advertiser)
 
         advertiser_component = est_action_rate * true_bid
-        adjusted_bid = advertiser_component + quality_bid
+        total_score = advertiser_component + quality_bid
 
         # We pick winners based on the normalized bid and charge the winner their true bid.
-        return adjusted_bid, true_bid, vrs_multiplier
+        return advertiser.index, total_score, true_bid
 
-    def compare_bid_to_current_highest_price_and_bid(self, idx, adj_bid, true_bid, winner_dict):
-        _current_highest_bid = winner_dict['adj_bid']
+    @staticmethod
+    def allocation_rule(adv_score_in_des_order):
+        """
+        Return advertiser with the largest total score.
+        """
+        return adv_score_in_des_order[0][0]
 
-        # If first-price auction then you pay your true bid.
+    def payment_rule(self, adv_score_in_des_order):
+        # TODO: Ideally, we would want to pass the payment rule as a function.
         if self.auction_type == 'first':
-            _price_paid = true_bid
-        # Else if this is a second-price auction, then you pay the second highest true bid.
-        else:
-            _price_paid = winner_dict['true_bid']
+            return self.first_price_auction(adv_score_in_des_order)
+        elif self.auction_type == 'vcg':
+            return self.vcg_auction(adv_score_in_des_order)
+        elif self.auction_type == 'critical_bid':
+            _winning_adv_idx = adv_score_in_des_order[0][0]
+            _winning_adv = self.advertiser_list[_winning_adv_idx]
 
-        # If new bid is greater than prior highest bid then
-        if adj_bid > _current_highest_bid:
-            winner_dict = {
-                'idx': idx,                  # Index of advertiser with largest bid so far, bid
-                'adj_bid': adj_bid,          # Adjusted bid score (estimated action rate, quality score, VRS, etc.)
-                'true_bid': true_bid,        # True bid.
-                'price_paid': _price_paid,   # Price advertiser pays.
-            }
-
-        # For second-price auction, new bid is smaller than current highest bid but higher than the second highest
-        # bidder than adjust price paid by the winner.
-        elif self.auction_type == 'second' and _price_paid > winner_dict['price_paid']:
-            winner_dict['price_paid'] = _price_paid
-
-        return winner_dict
-
-    def find_winning_bid_and_price_they_pay(self, bid_list):
-        """
-        Comment: This is possibly an inefficient implementation but it iterates over the list once and collects all the
-        information we want.
-
-        :param bid_list: Bid with and without VRS applied are indices 0 and 1 respectively.
-        :return: Advertiser idx of advertiser with largest bid.
-        """
-
-        winner = {'idx': None, 'adj_bid': float('-inf'), 'true_bid': None, 'price_paid': 0}
-        for idx, bid_tuple in enumerate(bid_list):
-            adjusted_bid, true_bid, _ = bid_tuple
-
-            winner = self.compare_bid_to_current_highest_price_and_bid(
-                idx=idx,
-                adj_bid=adjusted_bid,
-                true_bid=true_bid,
-                winner_dict=winner
+            return self.pay_critical_bid(
+                adv_score_in_des_order=adv_score_in_des_order,
+                quality_score=_winning_adv.quality_score,
+                est_action_rate=_winning_adv.est_action_rate,
             )
+        else:
+            raise utilities.CustomError("Only, first, vcg, and critical_bid are supported. Please specify a supported "
+                                        "auction.")
 
-        return winner
-
-    def find_vrs_winner(self, bid_list, winner):
+    @staticmethod
+    def first_price_auction(adv_score_in_des_order):
         """
-        if this demographic is underserved:
-            w.p. P_TOP:
-                return housing advertiser as the winner.
-        elif this demographic is over-served:
-            w.p. P_BOTTOM:
-                Remove housing advertiser from the auction, thereby, ensuring they lose.
-                return winner of this modified auction.
-
-        return regular winner.
+        Winner pays their true bid.
         """
-        assert self.advertiser_list[0].protected_domain, 'First advertiser is not protected. ' \
-                                                         'Please ensure first advertiser is protected.'
+        return adv_score_in_des_order[0][2]
 
-        vrs_multiplier = bid_list[0][2]
-        vrs_random_coin = random.random()
-        if vrs_multiplier > 1 and vrs_random_coin <= constants.P_TOP:
-            winner = {
-                'idx': 0,
-                'adj_bid': 'RAISE_ERROR_IF_WE_USE_THIS',
-                'true_bid': bid_list[0][1],
-                'price_paid': bid_list[0][1]
-            }
+    @staticmethod
+    def vcg_auction(adv_score_in_des_order):
+        """
+        The winner pays the difference in total score b/w advertiser with highest and second highest total score.
+        """
+        highest_score = adv_score_in_des_order[0][1]
+        second_highest_score = adv_score_in_des_order[1][1]
+        _diff = highest_score - second_highest_score
 
-        elif vrs_multiplier < 1 and vrs_random_coin <= constants.P_BOTTOM:
-            winner = self.find_winning_bid_and_price_they_pay(bid_list[1:])
+        # Tests.
+        assert _diff >= 0, 'Difference in score is negative. Check!'
+        _winners_true_bid = adv_score_in_des_order[0][2]
+        assert _diff <= _winners_true_bid, 'Winner pays more than their value. Check!'
 
-        return winner, vrs_multiplier, vrs_random_coin
+        return _diff
+
+    @staticmethod
+    def pay_critical_bid(adv_score_in_des_order, quality_score, est_action_rate, vrs_multiplier=1):
+        """
+        We find the minimum bid the winning advertiser would have to make to have the second highest total score
+        """
+        # Get second highest total score.
+        second_highest_score = adv_score_in_des_order[1][1]
+
+        # Remove quality score component.
+        _min_bid = second_highest_score - quality_score
+
+        # Divide out estimated action rate component.
+        _min_bid = _min_bid / est_action_rate
+
+        # Divide out VRS multiplier component.
+        _min_bid = _min_bid / vrs_multiplier
+
+        return _min_bid
 
     def run(self):
-        """
-        Runs auction with and without VRS simultaneously. This ensures we certainly use the same bids across our
-        experiments. ~ This is not necessary! We could: (a) Save bids and then re-run, (b) Rely on using same
-        random state but this removes all doubt.
-        """
-
-        # Get bid for each advertiser.
         bid_list = [self.calc_bid_for_each_advertiser(a) for a in self.advertiser_list]
+        adv_score_in_des_order = sorted(bid_list, key=lambda x: x[1], reverse=True)
+        winner_idx = self.allocation_rule(adv_score_in_des_order)
+        price_paid = self.payment_rule(adv_score_in_des_order)
 
-        # Find regular and VRS winner.
-        regular_winner = self.find_winning_bid_and_price_they_pay(bid_list)
-        vrs_winner, vrs_multiplier, vrs_random_coin = self.find_vrs_winner(bid_list, regular_winner)
+        total_score = bid_list[winner_idx][1]
+        true_bid = bid_list[winner_idx][2]
+        winner = {
+            'idx': winner_idx,
+            'total_score': total_score,
+            'true_bid': true_bid,
+            'price_paid': price_paid,
+        }
 
-        return vrs_winner, regular_winner, bid_list, vrs_multiplier, vrs_random_coin
+        return winner, bid_list
