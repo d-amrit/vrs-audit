@@ -5,6 +5,7 @@ TODO:
 
 WHAT? We would like to remove experiment hard-coding of mu/sigma, male/female mu mu/sigma. This should entirely be
 handled in the advertiser class. However, for the experiment to run, we do need to set those values.
+
 WHEN TO ADDRESS THIS? If and when we want (non-)housing advertisers to have different mu-sigma.
 """
 import numpy as np
@@ -19,6 +20,7 @@ from user import User
 from auction import Auction
 import utilities
 import constants
+import vrs
 
 
 class Experiment:
@@ -27,23 +29,33 @@ class Experiment:
     """
 
     def __init__(self, random_state=0, auction_type='first',
-                 advertiser_list=None, no_of_housing_advertisers=1, no_of_non_housing_advertisers=1,
+                 advertiser_list=None, no_of_housing_advertisers=1,
+                 no_of_non_housing_advertisers=1,
                  housing_budget=100, non_housing_budget=1000,
                  mu=None, sigma=None,
                  housing_value_mu=-4.4, housing_value_sigma=0.8,
-                 non_housing_value_male_mu=-4.4, non_housing_value_male_sigma=0.8,
-                 non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8, non_housing_diff=None,
-                 user_list=None, no_of_users=20_000, ad_slot_per_user=1, user_vrs_prob=None
+                 non_housing_value_male_mu=-3.4, non_housing_value_male_sigma=0.8,
+                 non_housing_value_female_mu=-3.4, non_housing_value_female_sigma=0.8,
+                 non_housing_diff=None,
+                 user_list=None, no_of_users=20_000, ad_slot_per_user=1,
+                 user_vrs_prob=None, voting_rule_logic='AND'
                  # TODO: Do we want to re-add VRS variables?
-                 # calc_gender_var=True, calc_race_var=False, use_noisy_bisg=False, adjust_down=False, batch_size=10,
+                 # calc_gender_var=True, calc_race_var=False, use_noisy_bisg=False,
+                 # adjust_down=False, batch_size=10,
                  ):
         # Initializing random state for replication purposes.
         utilities.initialize_random_state(random_state)
 
         # See auction.py for definition of diff.
-        assert auction_type in constants.SUPPORTED_AUCTION_TYPES, 'Only {1st, 2nd}-price and diff auctions are ' \
-                                                                  'supported.'
+        _auction_types = ', '.join(constants.SUPPORTED_AUCTION_TYPES)
+        assert auction_type in constants.SUPPORTED_AUCTION_TYPES, f"{auction_type} is not supported. " \
+                                                                  f"Only {_auction_types} auction types are supported."
         self.auction_type = auction_type
+
+        _voting_rules = ', '.join(constants.SUPPORTED_VOTING_RULES)
+        assert voting_rule_logic in constants.SUPPORTED_VOTING_RULES, f"{voting_rule_logic} is not supported. " \
+                                                                      f"Only {_voting_rules} auction types are supported."
+        self.voting_rule_logic = voting_rule_logic
 
         # Advertisers
         self.no_of_housing_advertisers = no_of_housing_advertisers
@@ -69,7 +81,8 @@ class Experiment:
             self.non_housing_value_male_sigma = non_housing_value_male_sigma
             self.non_housing_value_female_sigma = non_housing_value_female_sigma
 
-        self.advertiser_list = self.get_advertiser_list(advertiser_list)
+        self.input_advertiser_list = advertiser_list
+        self.advertiser_list = self.get_advertiser_list(self.input_advertiser_list)
         self.housing_adv_budget_exhausted = [i for i in range(no_of_housing_advertisers)]
 
         # Unique users and ad slots.
@@ -82,8 +95,9 @@ class Experiment:
         self.unique_users = set()
         self.target_gender_count = {i[0]: 0 for i in constants.GENDER}
         self.target_race_count = {i[0]: 0 for i in constants.RACE}
+        self.target_gender_race_count = {i: 0 for i in constants.GENDER_RACE_NAMES}
 
-        self.results = []
+        self.results = [{'bid_list': None, 'user': user} for user in self.ad_slot_list]
     
     def get_advertiser_list(self, advertiser_list):
         if advertiser_list is not None:
@@ -150,51 +164,82 @@ class Experiment:
         if user.index not in self.unique_users:
             self.target_gender_count[user.gender] += 1
             self.target_race_count[user.race] += 1
+            self.target_gender_race_count[f'{user.gender}-{user.race}'] += 1
             self.unique_users.add(user.index)
 
-    def update_winning_advertiser(self, user, regular_winner):
+    def update_winning_advertiser(self, user, regular_winner, update_vrs):
         # Update amount spent by winner.
         self.advertiser_list[regular_winner['idx']].update_params_after_winning_ad_slot(
             amount_spent=regular_winner['price_paid'],
-            update_vrs=False,
-            user=user
+            update_vrs=update_vrs,
+            user=user,
+            target_gender_count=self.target_gender_count,
+            target_race_count=self.target_race_count,
+            target_gender_race_count=self.target_gender_race_count,
+            total_no_of_users=len(self.unique_users)
         )
 
-    def simulate(self):
-        for user_idx, user in enumerate(self.ad_slot_list):
-            self.maintain_set_of_unique_users(user)
+    def simulate(self, apply_vrs=False, vrs_over_bid=None, vrs_under_bid=None, prefix=''):
+        for auction_idx, r in enumerate(self.results):
+            # 2nd simulation: Maintain set of users + target_{race, gender, race-gender}_count.
+            if apply_vrs:
+                self.maintain_set_of_unique_users(r['user'])
 
             a = Auction(
                 advertiser_list=self.advertiser_list,
-                user=user,
-                auction_type=self.auction_type
+                user=r['user'],
+                auction_type=self.auction_type,
+                voting_rule_logic=self.voting_rule_logic,
             )
-            regular_winner, bid_list = a.run()
+            winner, bid_list = a.run(
+                bid_list=r['bid_list'],
+                apply_vrs=apply_vrs,
+                vrs_over_bid=vrs_over_bid,
+                vrs_under_bid=vrs_under_bid,
+            )
 
             # Update winning advertiser.
-            self.update_winning_advertiser(user, regular_winner)
+            _update_vrs = apply_vrs and winner['protected_domain']
+            self.update_winning_advertiser(r['user'], winner, update_vrs=_update_vrs)
 
-            # Save results ~ For some reasons without deepcopy, this wasn't saving correctly.
-            self.results.append({
-                'regular_winner': copy.deepcopy(regular_winner),
-                'user': user,
-                'bid_list': bid_list[:],
-                'advertiser_list': copy.deepcopy(self.advertiser_list[:]),
-                'target_race_count': copy.deepcopy(self.target_race_count),
-                'target_gender_count': copy.deepcopy(self.target_gender_count),
+            # Save results ~ For some reason without deepcopy, this wasn't saving correctly.
+            self.results[auction_idx].update({
+                f'{prefix}winner': copy.deepcopy(winner),
+                f'{prefix}bid_list': bid_list[:],
             })
 
-            # Only the winning advertiser's status could have changed so we check only their status.
-            if self.check_if_all_housing_adv_have_spent_budget(regular_winner['idx']):
-                return
+            # 1st simulation: End when all housing advertisers have exhausted their budget.
+            if not apply_vrs:
+                # Only the winning advertiser's status could have changed so we check only their status.
+                if self.check_if_all_housing_adv_have_spent_budget(winner['idx']):
+                    return
+
+    def run(self):
+        # Run auction w/o VRS.
+        self.simulate()
+
+        # Reset advertisers.
+        self.advertiser_list = self.get_advertiser_list(advertiser_list=self.input_advertiser_list)
+
+        # VRS-stuff.
+        vrs_over_bid = vrs.calc_p_percentile_bid(self.results[:], constants.P_TOP)
+        vrs_under_bid = vrs.calc_p_percentile_bid(self.results[:], constants.P_BOTTOM)
+
+        # Run auction with VRS.
+        self.simulate(
+            apply_vrs=True,
+            vrs_over_bid=vrs_over_bid,
+            vrs_under_bid=vrs_under_bid,
+            prefix='vrs_'
+        )
 
     def check_if_all_housing_adv_have_spent_budget(self, idx):
         """
         We end the experiment when every housing advertiser has exhausted their budget.
         """
-        if idx < len(self.housing_adv_budget_exhausted):
-            _adv = self.advertiser_list[idx]
-            self.housing_adv_budget_exhausted[_adv] = _adv.amount_spent > _adv.budget
+        _adv = self.advertiser_list[idx]
+        if _adv.protected_domain:
+            self.housing_adv_budget_exhausted[idx] = _adv.amount_spent > _adv.budget
         return all(self.housing_adv_budget_exhausted)
 
     # --------------------------------------------------------------------------------------------------------------

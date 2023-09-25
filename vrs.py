@@ -1,8 +1,52 @@
+import numpy as np
 import copy
 import random
 
 from imprecise_bisg_with_dp import ImpreciseBISGwithDP
 import constants
+
+
+def voting_rule(gender_sign, race_sign, voting_rule_logic):
+    """
+    Both gender_sign and race_sign can take 3 values:
+
+    +1 = Over-served
+    0 = Equally served
+    -1 = Under-served
+
+    We aggregate these signs based on different rules.
+    """
+
+    if voting_rule_logic == 'AND':
+        # Only if both over/under-served report, over/under-served.
+        total_sum = gender_sign + race_sign
+        if total_sum == 2:
+            return 1
+        elif total_sum == -2:
+            return -1
+        else:
+            return 0
+
+    elif voting_rule_logic == 'OR':
+        # Only if both over/under-served report, over/under-served.
+        if gender_sign == -1 or race_sign == -1:
+            return -1
+        elif gender_sign == 1 or race_sign == 1:
+            return 1
+        else:
+            return 0
+
+    return 0
+
+
+def calc_p_percentile_bid(results_without_vrs, percentile_value, multiply_by=100):
+    """
+    We find the P_TOP percentile of winning bids. This is the bid that ensures the
+    """
+    winning_bid_list = [i['regular_winner']['true_bid'] for i in results_without_vrs if
+                        not i['regular_winner']['protected_domain']]
+    p_top_bid = np.percentile(winning_bid_list, percentile_value * multiply_by)
+    return p_top_bid
 
 
 class VarianceReductionSystem:
@@ -24,10 +68,11 @@ class VarianceReductionSystem:
         self.missed_due_to_user_var = self.initialize_race_gender_count_dict()
         self.vrs_applied = self.initialize_race_gender_count_dict()
 
-    def update_vrs_related_parameters(self, vrs_ad_reach, user_race_in_this_batch,
-                                      target_gender_count, target_race_count,
-                                      true_race_count, metas_race_count, gender_count,
-                                      total_no_of_users, race_var_sign, gender_var_sign):
+    def update_vrs_related_parameters(self, vrs_ad_reach, total_no_of_users,
+                                      metas_race_count, user_race_in_this_batch,
+                                      target_race_count, true_race_count, race_var_sign,
+                                      target_gender_count, gender_count, gender_var_sign,
+                                      target_gender_race_count, gender_race_count, gender_var_race_sign):
         self.count += 1
 
         _count_of_users = sum(user_race_in_this_batch.values()) % self.batch_size
@@ -62,7 +107,20 @@ class VarianceReductionSystem:
                     total_no_of_users=total_no_of_users
                 )
 
-        return metas_race_count, race_var_sign, gender_var_sign, user_race_in_this_batch
+            gender_var_race_sign = self.update_variance_sign(
+                vrs_ad_reach=vrs_ad_reach,
+                count_dict=gender_race_count,
+                population_dist=target_gender_race_count,
+                total_no_of_users=total_no_of_users
+            )
+
+        return {
+            'metas_race_count': metas_race_count,
+            'race_var_sign': race_var_sign,
+            'gender_var_sign': gender_var_sign,
+            'gender_var_race_sign': gender_var_sign,
+            'user_race_in_this_batch': gender_var_sign
+        }
 
     @staticmethod
     def update_variance_sign(vrs_ad_reach, count_dict, population_dist, total_no_of_users=1):
