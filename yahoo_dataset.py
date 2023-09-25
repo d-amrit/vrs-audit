@@ -34,6 +34,7 @@ def fit_lognormal_data(data, plot_fit=True):
 class FitLogNormal:
     def __init__(self):
         self.df = self.read()
+        self.remove_missing_prices()
         mean_list, sigma_list = self.fit_lognormal_for_each_phrase()
         self.gen_boxplot(metric='Mean', list_of_values=mean_list)
         self.gen_boxplot(metric='Standard deviation', list_of_values=sigma_list)
@@ -42,7 +43,12 @@ class FitLogNormal:
     def read():
         file_path = '/Users/amrit/Downloads/dataset/ydata-ysm-advertiser-bids-v1_0.txt'
         _columns = ['Timestamp', 'Phrase_ID', 'Account_ID', 'Price', 'Auto']
-        return pandas.read_csv(file_path, delimiter='\t', names=_columns)
+        df = pandas.read_csv(file_path, delimiter='\t', names=_columns)
+        return df
+
+    def remove_missing_prices(self):
+        _mask = (self.df['Price'].isnull()) | (self.df['Price'] < 0)
+        self.df = self.df.loc[self.df[~_mask].index, ].reset_index(drop=True)
 
     def fit_lognormal_for_each_phrase(self):
         mean_list, sigma_list = [], []
@@ -58,7 +64,7 @@ class FitLogNormal:
     def gen_boxplot(metric, list_of_values):
         create_figures.create_chart_outline(
             x_label='',
-            y_label=f'{metric.lower()} of fitted lognormal distribution for each keyword',
+            y_label=f'{metric} of fitted lognormal distribution for each keyword',
             set_yaxis_as_percent=False,
             title=f"How much does {metric.lower()} vary across different keywords in Yahoo dataset?",
             fontsize=create_figures.FONT_SIZE,
@@ -68,3 +74,7 @@ class FitLogNormal:
         _file_name = f'{metric} of fitted lognormal distribution for each keyword in Yahoo dataset.png'
         create_figures.save_figure(_file_name)
         plt.show()
+
+
+if __name__ == '__main__':
+    _ = FitLogNormal()
