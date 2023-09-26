@@ -81,13 +81,13 @@ def plot_figure_for_experiment(results_dict, x_axis, x_label, y_lim_dict=None):
 
             # Regular auction.
             if housing_spend < constants.HOUSING_BUDGET:
-                if result['regular_winner']['idx'] == 0:
+                if result['winner']['idx'] == 0:
                     actual_count_without_vrs[result['gender']] += 1
-                    housing_spend += result['regular_winner']['price_paid']
+                    housing_spend += result['winner']['price_paid']
                     housing_ad_slots += 1
                 else:
                     non_housing_ad_slots += 1
-                    non_housing_spend += result['regular_winner']['price_paid']
+                    non_housing_spend += result['winner']['price_paid']
             else:
                 break
 
@@ -101,7 +101,7 @@ def plot_figure_for_experiment(results_dict, x_axis, x_label, y_lim_dict=None):
                     vrs_non_housing_ad_slots += 1
                     vrs_non_housing_spend += result['vrs_winner']['price_paid']
 
-                revenue_without_vrs += result['regular_winner']['price_paid']
+                revenue_without_vrs += result['winner']['price_paid']
                 revenue_with_vrs += result['vrs_winner']['price_paid']
                 auction_count += 1
 
@@ -343,10 +343,10 @@ def figures_for_race_gender_experiments(results_dict, x_axis, user_vrs_prob_list
 
                 # Regular auction.
                 if housing_spend < constants.HOUSING_BUDGET:
-                    if result['regular_winner']['idx'] == 0:
+                    if result['winner']['idx'] == 0:
                         actual_gender, actual_race, actual_race_gender = update_counts(actual_gender, actual_race,
                                                                                        actual_race_gender, result)
-                        housing_spend += result['regular_winner']['price_paid']
+                        housing_spend += result['winner']['price_paid']
                 else:
                     break
 
@@ -498,7 +498,7 @@ def get_counts_by_gender_and_race(results_dict):
             if r['vrs_winner']['idx'] == 0:
                 housing_g, housing_r, housing_gr = update_counts(housing_g, housing_r, housing_gr, r)
                 amount_spent += r['vrs_winner']['price_paid']
-                if r['vrs_winner']['idx'] != r['regular_winner']['idx']:
+                if r['vrs_winner']['idx'] != r['winner']['idx']:
                     slots_won_due_to_vrs[f"{r['gender']}-{r['race']}"] += 1
         else:
             break

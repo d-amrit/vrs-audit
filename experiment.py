@@ -167,10 +167,10 @@ class Experiment:
             self.target_gender_race_count[f'{user.gender}-{user.race}'] += 1
             self.unique_users.add(user.index)
 
-    def update_winning_advertiser(self, user, regular_winner, update_vrs):
+    def update_winning_advertiser(self, user, winner, update_vrs):
         # Update amount spent by winner.
-        self.advertiser_list[regular_winner['idx']].update_params_after_winning_ad_slot(
-            amount_spent=regular_winner['price_paid'],
+        self.advertiser_list[winner['idx']].update_params_after_winning_ad_slot(
+            amount_spent=winner['price_paid'],
             update_vrs=update_vrs,
             user=user,
             target_gender_count=self.target_gender_count,
@@ -250,9 +250,9 @@ class Experiment:
         for iteration, result in enumerate(self.results):
             _bid_list = result['bid_list']
             _max_total_score = max([i[0] for i in _bid_list])
-            check_total_score = result['regular_winner']['total_score'] == _max_total_score
+            check_total_score = result['winner']['total_score'] == _max_total_score
             _max_true_bid = max([i[1] for i in _bid_list])
-            check_true_bid = result['regular_winner']['true_bid'] == _max_true_bid
+            check_true_bid = result['winner']['true_bid'] == _max_true_bid
             assert check_total_score and check_true_bid, f'Regular winner was incorrectly chosen in ' \
                                                          f'iteration {iteration}.'
 

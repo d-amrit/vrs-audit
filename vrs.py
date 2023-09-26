@@ -43,8 +43,8 @@ def calc_p_percentile_bid(results_without_vrs, percentile_value, multiply_by=100
     """
     We find the P_TOP percentile of winning bids. This is the bid that ensures the
     """
-    winning_bid_list = [i['regular_winner']['true_bid'] for i in results_without_vrs if
-                        not i['regular_winner']['protected_domain']]
+    winning_bid_list = [i['winner']['true_bid'] for i in results_without_vrs if
+                        not i['winner']['protected_domain']]
     p_top_bid = np.percentile(winning_bid_list, percentile_value * multiply_by)
     return p_top_bid
 
