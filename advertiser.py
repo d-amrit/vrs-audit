@@ -104,7 +104,7 @@ class Advertiser:
             self.amount_spent += amount_spent
 
         # We do not count impressions to unique users.
-        if update_vrs and user.index not in self.unique_users_reached:
+        if update_vrs and user.index not in self.unique_users_reached and self.protected_domain:
             self.unique_users_reached.add(user.index)
 
             self.gender_race_count[f'{user.gender}-{user.race}'] += 1

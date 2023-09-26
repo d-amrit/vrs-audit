@@ -38,10 +38,9 @@ class Experiment:
                  non_housing_value_female_mu=-3.4, non_housing_value_female_sigma=0.8,
                  non_housing_diff=None,
                  user_list=None, no_of_users=20_000, ad_slot_per_user=1,
-                 user_vrs_prob=None, voting_rule_logic='AND'
-                 # TODO: Do we want to re-add VRS variables?
-                 # calc_gender_var=True, calc_race_var=False, use_noisy_bisg=False,
-                 # adjust_down=False, batch_size=10,
+                 user_vrs_prob=None, voting_rule_logic='AND',
+                 calc_gender_var=True, calc_race_var=False, use_noisy_bisg=False,
+                 adjust_down=False, batch_size=10,
                  ):
         # Initializing random state for replication purposes.
         utilities.initialize_random_state(random_state)
@@ -53,9 +52,18 @@ class Experiment:
         self.auction_type = auction_type
 
         _voting_rules = ', '.join(constants.SUPPORTED_VOTING_RULES)
-        assert voting_rule_logic in constants.SUPPORTED_VOTING_RULES, f"{voting_rule_logic} is not supported. " \
-                                                                      f"Only {_voting_rules} auction types are supported."
+        assert voting_rule_logic in constants.SUPPORTED_VOTING_RULES, f"{voting_rule_logic} is not supported. Only " \
+                                                                      f"{_voting_rules} auction types are supported."
         self.voting_rule_logic = voting_rule_logic
+
+        # VRS
+        self.vrs_class = vrs.VarianceReductionSystem(
+            calc_gender_var=calc_gender_var,
+            calc_race_var=calc_race_var,
+            batch_size=batch_size,
+            use_noisy_bisg=use_noisy_bisg,
+            adjust_down=adjust_down
+        )
 
         # Advertisers
         self.no_of_housing_advertisers = no_of_housing_advertisers
@@ -111,7 +119,8 @@ class Experiment:
                     male_mu=self.housing_value_mu,
                     female_mu=self.housing_value_mu,
                     male_sigma=self.housing_value_sigma,
-                    female_sigma=self.housing_value_sigma
+                    female_sigma=self.housing_value_sigma,
+                    vrs_class=self.vrs_class
                 ) for i in range(self.no_of_housing_advertisers)]
             non_housing = [
                 Advertiser(

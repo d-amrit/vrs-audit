@@ -72,7 +72,7 @@ class VarianceReductionSystem:
                                       metas_race_count, user_race_in_this_batch,
                                       target_race_count, true_race_count, race_var_sign,
                                       target_gender_count, gender_count, gender_var_sign,
-                                      target_gender_race_count, gender_race_count, gender_var_race_sign):
+                                      target_gender_race_count, gender_race_count, gender_race_var_sign):
         self.count += 1
 
         _count_of_users = sum(user_race_in_this_batch.values()) % self.batch_size
@@ -107,7 +107,7 @@ class VarianceReductionSystem:
                     total_no_of_users=total_no_of_users
                 )
 
-            gender_var_race_sign = self.update_variance_sign(
+            gender_race_var_sign = self.update_variance_sign(
                 vrs_ad_reach=vrs_ad_reach,
                 count_dict=gender_race_count,
                 population_dist=target_gender_race_count,
@@ -118,8 +118,8 @@ class VarianceReductionSystem:
             'metas_race_count': metas_race_count,
             'race_var_sign': race_var_sign,
             'gender_var_sign': gender_var_sign,
-            'gender_var_race_sign': gender_var_sign,
-            'user_race_in_this_batch': gender_var_sign
+            'gender_race_var_sign': gender_race_var_sign,
+            'user_race_in_this_batch': user_race_in_this_batch
         }
 
     @staticmethod
