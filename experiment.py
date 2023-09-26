@@ -217,11 +217,13 @@ class Experiment:
                 f'{prefix}bid_list': bid_list[:],
             })
 
-            # 1st simulation: End when all housing advertisers have exhausted their budget.
-            if not apply_vrs:
-                # Only the winning advertiser's status could have changed so we check only their status.
-                if self.check_if_all_housing_adv_have_spent_budget(winner['idx']):
-                    return
+            # Only the winning advertiser's status could have changed so we check only their status.
+            if self.check_if_all_housing_adv_have_spent_budget(winner['idx']):
+                # 1st simulation: Ends when all housing advertisers have exhausted their budget. By design, this occurs
+                # before all users are served, truncate the results.
+                if not apply_vrs:
+                    self.results = self.results[:auction_idx + 1]
+                return
 
     def run(self):
         # Run auction w/o VRS.
