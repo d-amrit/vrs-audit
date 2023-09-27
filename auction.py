@@ -1,6 +1,3 @@
-import random
-
-import constants
 import utilities
 
 
@@ -31,12 +28,15 @@ class Auction:
         # TODO: Implement.
         return advertiser.quality_score
 
-    def calc_bid_for_each_advertiser(self, advertiser, vrs_multiplier=1, vrs_adj_bid=None):
+    def calc_bid_for_each_advertiser(self, advertiser, true_bid=None, vrs_over_bid=None, vrs_under_bid=None):
         # Calculated by the platform but dependent on advertiser inputs (e.g. budget).
-        if vrs_adj_bid is not None:
-            true_bid = vrs_adj_bid
-        else:
-            true_bid = vrs_multiplier * advertiser.calc_user_based_bid(self.user)
+        if true_bid is None:
+            true_bid = advertiser.calc_user_based_bid(self.user)
+
+        if vrs_over_bid is not None:
+            true_bid = max(true_bid, vrs_over_bid)
+        elif vrs_under_bid is not None:
+            true_bid = min(true_bid, vrs_under_bid)
 
         # Calculated by the platform.
         quality_bid = self.calc_quality_score(advertiser)
@@ -59,6 +59,8 @@ class Auction:
         # TODO: Ideally, we would want to pass the payment rule as a function.
         if self.auction_type == 'first':
             return self.first_price_auction(adv_score_in_des_order)
+        elif self.auction_type == 'second':
+            return self.second_price_auction(adv_score_in_des_order)
         elif self.auction_type == 'vcg':
             return self.vcg_auction(adv_score_in_des_order)
         elif self.auction_type == 'critical_bid':
@@ -80,6 +82,13 @@ class Auction:
         Winner pays their true bid.
         """
         return adv_score_in_des_order[0][2]
+
+    @staticmethod
+    def second_price_auction(adv_score_in_des_order):
+        """
+        Winner pays bid of advertiser with second-highest score.
+        """
+        return adv_score_in_des_order[1][2]
 
     @staticmethod
     def vcg_auction(adv_score_in_des_order):
@@ -127,15 +136,18 @@ class Auction:
         the Advertiser class.
         """
         vrs_bid_list = bid_list[:]
-        for idx, _ in enumerate(vrs_bid_list):
+        for idx, bid_tuple in enumerate(vrs_bid_list):
+            _, _, true_bid = bid_tuple
             _adv = self.advertiser_list[idx]
             if _adv.protected_domain:
                 _over_under_served = _adv.is_demographic_under_or_over_served(user=self.user,
                                                                               voting_rule_logic=self.voting_rule_logic)
-                if _over_under_served == 'over':
-                    vrs_bid_list[idx] = self.calc_bid_for_each_advertiser(_adv, vrs_adj_bid=vrs_over_bid)
-                elif _over_under_served == 'under':
-                    vrs_bid_list[idx] = self.calc_bid_for_each_advertiser(_adv, vrs_adj_bid=vrs_under_bid)
+                if _over_under_served == 'under':
+                    vrs_bid_list[idx] = self.calc_bid_for_each_advertiser(_adv, true_bid=true_bid,
+                                                                          vrs_over_bid=vrs_over_bid)
+                elif _over_under_served == 'over' and vrs_under_bid is not None:
+                    vrs_bid_list[idx] = self.calc_bid_for_each_advertiser(_adv, true_bid=true_bid,
+                                                                          vrs_under_bid=vrs_under_bid)
         return vrs_bid_list
 
     def run_auction(self, bid_list):
