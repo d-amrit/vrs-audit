@@ -17,12 +17,18 @@ def voting_rule(gender_sign, race_sign, voting_rule_logic):
     We aggregate these signs based on different rules.
     """
 
-    if voting_rule_logic == 'AND':
+    if 'AND' in voting_rule_logic:
         # Only if both over/under-served report, over/under-served.
         total_sum = gender_sign + race_sign
-        if total_sum >= 1:  # previously 2
+
+        if voting_rule_logic == 'AND-inclusive':
+            lower, upper = -1, 1
+        else:
+            lower, upper = -2, 2
+
+        if total_sum >= upper:  # previously 2
             return 1
-        elif total_sum < 0:  # previously -2
+        elif total_sum <= lower:  # previously -2
             return -1
         else:
             return 0

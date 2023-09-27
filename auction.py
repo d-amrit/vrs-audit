@@ -6,7 +6,8 @@ class Auction:
     We are going to follow the AdWord model. At every step, a user with certain characteristics appears. We then
     hold an auction for this ad slot.
     """
-    def __init__(self, advertiser_list, user, normalize_bid=False, auction_type='first', voting_rule_logic='AND'):
+    def __init__(self, advertiser_list, user, normalize_bid=False, auction_type='first',
+                 voting_rule_logic='AND-inclusive'):
         self.advertiser_list = self.get_relevant_advertisers(advertiser_list)
         self.user = user
         self.normalize_bid = normalize_bid

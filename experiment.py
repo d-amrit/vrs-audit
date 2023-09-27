@@ -38,7 +38,7 @@ class Experiment:
                  non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8,
                  non_housing_diff=None,
                  user_list=None, no_of_users=40_000, ad_slot_per_user=1,
-                 user_vrs_prob=None, voting_rule_logic='AND',
+                 user_vrs_prob=None, voting_rule_logic='AND-inclusive',
                  calc_gender_var=True, calc_race_var=True, use_noisy_bisg=False,
                  adjust_down=False, batch_size=10, p_top=constants.P_TOP, p_bottom=constants.P_BOTTOM):
 

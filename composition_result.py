@@ -32,6 +32,8 @@ class CompositionResult:
         self.tvd_dict = {series: {'Gender': [], 'Race': [], 'Gender-Race': []} for series in series_list}
         self.max_discrepancy_dict = {series: [] for series in series_list}
 
+        # Revenue
+
     def simulate_single_experiment(self, x, series):
         self.experiment_params[self.x_var_name] = x
         self.experiment_params[self.series_var_name] = series
@@ -92,43 +94,43 @@ class CompositionResult:
                 'y_lim': None,
                 'skip': False,
                 'grid': False,
-                # 'key_filter': 'Race'
+                'key_filter': 'Gender'
             },
-            # {
-            #     'y_label': "% of housing advertiser's actual audience",
-            #     'set_yaxis_as_percent': True,
-            #     'data_dict': self.housing_audience_p,
-            #     'custom_color_and_style': 2,
-            #     'file_name': 'Housing audience breakdown by race-gender subgroups',
-            #     'y_lim': None,
-            #     'skip': False,
-            #     'grid': False,
-            #     # 'key_filter': 'Female'
-            # },
+            {
+                'y_label': "% of housing advertiser's actual audience",
+                'set_yaxis_as_percent': True,
+                'data_dict': self.housing_audience_p,
+                'custom_color_and_style': 2,
+                'file_name': 'Housing audience breakdown by race-gender subgroups',
+                'y_lim': None,
+                'skip': False,
+                'grid': False,
+                'key_filter': 'Male'
+            },
             # # TODO: What's happening here? Some of the series drop off. Certain users receive no ads!
             # {
             #     'y_label': "% of ad slots won due to VRS",
             #     'set_yaxis_as_percent': True,
             #     'data_dict': self.slots_won_due_to_vrs_p,
             #     'custom_color_and_style': 2,
-            #     'file_name': 'VRS prevents us from creating a 0-50 counterexample',
+            #     'file_name': 'Percent of ad slots won due to VRS',
             #     'y_lim': None,
             #     # 'skip': self.exp_id is not None,
             #     'skip': False,
             #     'grid': False,
-            #     # 'series_filter': 0
+            #     'key_filter': 'Male'
             # },
-            # {
-            #     'y_label': "Max discrepancy between same gender (resp. race) \n across different race (resp. gender)",
-            #     'set_yaxis_as_percent': True,
-            #     'data_dict': self.max_discrepancy_dict,
-            #     'custom_color_and_style': 1,
-            #     'file_name': 'Max discrepancy between subgroups',
-            #     'y_lim': None,
-            #     # 'skip': self.series_var_name not in ['user_vrs_prob', 'no_of_non_housing_advertisers'],
-            #     'skip': False,
-            #     'grid': True
-            # },
+            {
+                'y_label': "Max discrepancy between same gender (resp. race) \n across different race (resp. gender)",
+                'set_yaxis_as_percent': True,
+                'data_dict': self.max_discrepancy_dict,
+                'custom_color_and_style': 1,
+                'file_name': 'Max discrepancy between subgroups',
+                'y_lim': None,
+                # 'skip': self.series_var_name not in ['user_vrs_prob', 'no_of_non_housing_advertisers'],
+                'skip': False,
+                'grid': True
+            },
             {
                 'y_label': "Number of housing ad slots",
                 'set_yaxis_as_percent': False,
@@ -139,7 +141,7 @@ class CompositionResult:
                 # 'skip': self.series_var_name not in ['no_of_non_housing_advertisers'],
                 'skip': False,
                 'grid': False,
-                # 'series_filter': 0
+                'key_filter': 'Male'
             },
             {
                 'y_label': "Number of housing ad slots won due to VRS",
@@ -151,7 +153,7 @@ class CompositionResult:
                 # 'skip': self.exp_id is not None,
                 'skip': False,
                 'grid': False,
-                # 'series_filter': 0
+                'key_filter': 'Male'
             },
         ]
 
@@ -215,7 +217,7 @@ class CompositionResult:
             else:
                 _color = 'green'
 
-        if key not in [f'{i[0]}-{i[1]}' for i in constants.PRIVILEGED_SUBGROUPS]:
+        if key == 'Gender-Race' or key in [f'{i[0]}-{i[1]}' for i in constants.PRIVILEGED_SUBGROUPS]:
             _style = 'dashed'
 
         return _color, _style

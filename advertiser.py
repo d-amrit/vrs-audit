@@ -75,15 +75,12 @@ class Advertiser:
     def is_demographic_under_or_over_served(self, user, voting_rule_logic):
         if voting_rule_logic == 'track-race-gender':
             _sign = self.gender_race_var_sign[f'{user.gender}-{user.race}']
-        elif voting_rule_logic in ['AND', 'OR']:
+        else:
             _sign = vrs.voting_rule(
                 gender_sign=self.gender_var_sign[user.gender],
                 race_sign=self.race_var_sign[user.race],
                 voting_rule_logic=voting_rule_logic
             )
-        else:
-            raise utilities.CustomError('Invalid rule type given. AND, OR, and track-race-gender are currently '
-                                        'supported')
 
         return constants.OVER_UNDER_SERVED_MAP[_sign]
 

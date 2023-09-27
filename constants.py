@@ -52,7 +52,7 @@ COMPLIANCE_REQUIREMENTS = [0.05, 0.1]
 HOUSING_BUDGET = 100
 
 SUPPORTED_AUCTION_TYPES = ['first', 'second', 'vcg', 'critical_bid']
-SUPPORTED_VOTING_RULES = ['AND', 'OR', 'track-race-gender']
+SUPPORTED_VOTING_RULES = ['AND-inclusive', 'AND-exclusive', 'OR', 'track-race-gender']
 PRIVILEGED_SUBGROUPS = [('Male', 'White'), ('Female', 'African American')]
 
 COLOR_LIST = ['blue', 'orange', 'green', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
