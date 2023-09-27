@@ -27,6 +27,7 @@ class CompositionResult:
         self.gender_race_list = [f'{g}-{r}' for g in constants.GENDER_NAMES for r in constants.RACE_NAMES]
         self.housing_audience = {series: {i: [] for i in self.gender_race_list} for series in series_list}
         self.housing_audience_p = {series: {i: [] for i in self.gender_race_list} for series in series_list}
+        self.slots_won_due_to_vrs = {series: {i: [] for i in self.gender_race_list} for series in series_list}
         self.slots_won_due_to_vrs_p = {series: {i: [] for i in self.gender_race_list} for series in series_list}
         self.tvd_dict = {series: {'Gender': [], 'Race': [], 'Gender-Race': []} for series in series_list}
         self.max_discrepancy_dict = {series: [] for series in series_list}
@@ -35,7 +36,7 @@ class CompositionResult:
         self.experiment_params[self.x_var_name] = x
         self.experiment_params[self.series_var_name] = series
         e = experiment.Experiment(**self.experiment_params)
-        e.simulate()
+        e.run()
         return e
 
     def calc_tvd_for_demographic_groups(self, e, series):
@@ -64,6 +65,7 @@ class CompositionResult:
                 _p = (slots_won_due_to_vrs[key] / housing_gr[key]) * 100.0
             else:
                 _p = np.nan
+            self.slots_won_due_to_vrs[series][key].append(slots_won_due_to_vrs[key])
             self.slots_won_due_to_vrs_p[series][key].append(_p)
 
     def run_experiment(self):
@@ -74,6 +76,7 @@ class CompositionResult:
                 housing_audience_by_gender_and_race, slots_won_due_to_vrs = \
                     self.calc_tvd_for_demographic_groups(e, series)
                 self.calc_perc_housing_audience_by_demographic(housing_audience_by_gender_and_race, series)
+
                 self.calc_perc_housing_slots_won_due_to_vrs(housing_audience_by_gender_and_race,
                                                             slots_won_due_to_vrs, series)
 
@@ -88,27 +91,32 @@ class CompositionResult:
                 'file_name': 'TVD by gender and race vs Diff between mu',
                 'y_lim': None,
                 'skip': False,
-                'grid': False
+                'grid': False,
+                # 'key_filter': 'Race'
             },
-            {
-                'y_label': "% of housing advertiser's actual audience",
-                'set_yaxis_as_percent': True,
-                'data_dict': self.housing_audience_p,
-                'custom_color_and_style': 2,
-                'file_name': 'Housing audience breakdown by race-gender subgroups',
-                'y_lim': (-5, 55),
-                'skip': False,
-                'grid': False
-            },
+            # {
+            #     'y_label': "% of housing advertiser's actual audience",
+            #     'set_yaxis_as_percent': True,
+            #     'data_dict': self.housing_audience_p,
+            #     'custom_color_and_style': 2,
+            #     'file_name': 'Housing audience breakdown by race-gender subgroups',
+            #     'y_lim': None,
+            #     'skip': False,
+            #     'grid': False,
+            #     # 'key_filter': 'Female'
+            # },
+            # # TODO: What's happening here? Some of the series drop off. Certain users receive no ads!
             # {
             #     'y_label': "% of ad slots won due to VRS",
             #     'set_yaxis_as_percent': True,
             #     'data_dict': self.slots_won_due_to_vrs_p,
             #     'custom_color_and_style': 2,
             #     'file_name': 'VRS prevents us from creating a 0-50 counterexample',
-            #     'y_lim': (-5, 55),
-            #     'skip': self.exp_id is not None,
-            #     'grid': False
+            #     'y_lim': None,
+            #     # 'skip': self.exp_id is not None,
+            #     'skip': False,
+            #     'grid': False,
+            #     # 'series_filter': 0
             # },
             # {
             #     'y_label': "Max discrepancy between same gender (resp. race) \n across different race (resp. gender)",
@@ -116,21 +124,35 @@ class CompositionResult:
             #     'data_dict': self.max_discrepancy_dict,
             #     'custom_color_and_style': 1,
             #     'file_name': 'Max discrepancy between subgroups',
-            #     'y_lim': (-5, 55),
-            #     'skip': self.series_var_name not in ['user_vrs_prob', 'no_of_non_housing_advertisers'],
+            #     'y_lim': None,
+            #     # 'skip': self.series_var_name not in ['user_vrs_prob', 'no_of_non_housing_advertisers'],
+            #     'skip': False,
             #     'grid': True
             # },
-            # {
-            #     'y_label': "Number of housing ads shown",
-            #     'set_yaxis_as_percent': False,
-            #     'data_dict': self.housing_audience,
-            #     'custom_color_and_style': 2,
-            #     'file_name': 'Number of housing ads shown',
-            #     'y_lim': None,
-            #     'skip': self.series_var_name not in ['no_of_non_housing_advertisers'],
-            #     'grid': False,
-            #     'exclude_key': 'Male'
-            # }
+            {
+                'y_label': "Number of housing ad slots",
+                'set_yaxis_as_percent': False,
+                'data_dict': self.housing_audience,
+                'custom_color_and_style': 2,
+                'file_name': 'Number of housing ad slots by gender-race',
+                'y_lim': None,
+                # 'skip': self.series_var_name not in ['no_of_non_housing_advertisers'],
+                'skip': False,
+                'grid': False,
+                # 'series_filter': 0
+            },
+            {
+                'y_label': "Number of housing ad slots won due to VRS",
+                'set_yaxis_as_percent': False,
+                'data_dict': self.slots_won_due_to_vrs,
+                'custom_color_and_style': 2,
+                'file_name': 'Number of housing ad slots won due to VRS by gender-race',
+                'y_lim': None,
+                # 'skip': self.exp_id is not None,
+                'skip': False,
+                'grid': False,
+                # 'series_filter': 0
+            },
         ]
 
         # TODO: Don't hard code this!
@@ -156,7 +178,8 @@ class CompositionResult:
                 for key, value in _series_data.items():
                     if 'exclude_key' not in config or config['exclude_key'] not in key:
                         if 'key_filter' not in config or config['key_filter'] in key:
-                            self._plot_series(series, key, value, config)
+                            if 'series_filter' not in config or series == config['series_filter']:
+                                self._plot_series(series, key, value, config)
             else:
                 self._plot_series(series, series, _series_data, config)
 
@@ -192,7 +215,7 @@ class CompositionResult:
             else:
                 _color = 'green'
 
-        if 'African American' in key or 'Race' in key:
+        if key not in [f'{i[0]}-{i[1]}' for i in constants.PRIVILEGED_SUBGROUPS]:
             _style = 'dashed'
 
         return _color, _style
@@ -224,7 +247,7 @@ class CompositionResult:
             for c in constants.COMPLIANCE_REQUIREMENTS:
                 _label = f'{int(c * 100)}% compliance'
                 plt.axhline(y=c, color='red', linestyle='dotted', label='_' + _label, linewidth=2)
-                plt.text(self.x_axis[0], c + 0.002, _label, fontsize=create_figures.FONT_SIZE)
+                plt.text(self.x_axis[-2], c + 0.005, _label, fontsize=create_figures.FONT_SIZE)
 
         elif file_name == 'Housing audience breakdown by race-gender subgroups':
             plt.axhline(y=25, color='red', linestyle='dotted', label='_% of target audience', linewidth=2)
@@ -232,8 +255,9 @@ class CompositionResult:
 
             # TODO: Better flag?
             if 'user_vrs_prob' not in self.experiment_params:
-                plt.axhline(y=4, color='#36454F', linestyle='dotted', label='_no_progress', linewidth=2)
-                plt.text(3.1, 2, 'Stagnates at ~5% after difference >= 3', fontsize=create_figures.FONT_SIZE)
+                pass
+                # plt.axhline(y=4, color='#36454F', linestyle='dotted', label='_no_progress', linewidth=2)
+                # plt.text(3.1, 2, 'Stagnates at ~5% after difference >= 3', fontsize=create_figures.FONT_SIZE)
             elif self.exp_id != 'vary_only_along_gender_lines':
                 plt.axhline(y=0, color='#36454F', linestyle='dotted', label='_0%', linewidth=2)
                 plt.text(-2.25, 1, "~0% of housing advertiser's actual audience", fontsize=create_figures.FONT_SIZE)
@@ -241,9 +265,9 @@ class CompositionResult:
                 plt.axhline(y=50, color='#36454F', linestyle='dotted', label='_50%', linewidth=2)
                 plt.text(-2.25, 51, "~50% of housing advertiser's actual audience", fontsize=create_figures.FONT_SIZE)
 
-        elif file_name == 'VRS prevents us from creating a 0-50 counterexample':
-            plt.text(4, 39, 'Male-Black and Female-White \nusers receive all their ad slots \ndue to VRS.',
-                     fontsize=create_figures.FONT_SIZE)
+        # elif file_name == 'VRS prevents us from creating a 0-50 counterexample':
+        #     plt.text(4, 39, 'Male-Black and Female-White \nusers receive all their ad slots \ndue to VRS.',
+        #              fontsize=create_figures.FONT_SIZE)
 
         if self.exp_id == 'vary_only_along_gender_lines':
             if self.experiment_params['housing_value_mu'] != self.experiment_params['non_housing_value_male_mu']:
