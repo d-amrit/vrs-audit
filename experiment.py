@@ -34,14 +34,14 @@ class Experiment:
                  housing_budget=100, non_housing_budget=1000,
                  mu=None, sigma=None,
                  housing_value_mu=-4.4, housing_value_sigma=0.8,
-                 non_housing_value_male_mu=-3.4, non_housing_value_male_sigma=0.8,
-                 non_housing_value_female_mu=-3.4, non_housing_value_female_sigma=0.8,
+                 non_housing_value_male_mu=-4.4, non_housing_value_male_sigma=0.8,
+                 non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8,
                  non_housing_diff=None,
-                 user_list=None, no_of_users=20_000, ad_slot_per_user=1,
+                 user_list=None, no_of_users=40_000, ad_slot_per_user=1,
                  user_vrs_prob=None, voting_rule_logic='AND',
-                 calc_gender_var=True, calc_race_var=False, use_noisy_bisg=False,
-                 adjust_down=False, batch_size=10,
-                 ):
+                 calc_gender_var=True, calc_race_var=True, use_noisy_bisg=False,
+                 adjust_down=False, batch_size=10, p_top=constants.P_TOP, p_bottom=constants.P_BOTTOM):
+
         # Initializing random state for replication purposes.
         utilities.initialize_random_state(random_state)
 
@@ -62,8 +62,11 @@ class Experiment:
             calc_race_var=calc_race_var,
             batch_size=batch_size,
             use_noisy_bisg=use_noisy_bisg,
-            adjust_down=adjust_down
+            adjust_down=adjust_down,
         )
+        self.p_top = p_top
+        self.p_bottom = p_bottom
+        self.adjust_down = adjust_down
 
         # Advertisers
         self.no_of_housing_advertisers = no_of_housing_advertisers
@@ -71,6 +74,11 @@ class Experiment:
         self.housing_budget = housing_budget
         self.non_housing_budget = non_housing_budget
         self.non_housing_diff = non_housing_diff
+
+        if self.non_housing_diff:
+            assert mu is not None and sigma is not None, 'For testing purposes, we want to all advertisers have the ' \
+                                                         'same mu and sigma, and the difference is driven by non_' \
+                                                         'housing_diff.'
 
         if mu is not None:
             self.housing_value_mu = mu
@@ -91,7 +99,7 @@ class Experiment:
 
         self.input_advertiser_list = advertiser_list
         self.advertiser_list = self.get_advertiser_list(self.input_advertiser_list)
-        self.housing_adv_budget_exhausted = [i for i in range(no_of_housing_advertisers)]
+        self.housing_adv_budget_exhausted = [False for _ in range(no_of_housing_advertisers)]
 
         # Unique users and ad slots.
         self.user_vrs_prob = user_vrs_prob
@@ -105,7 +113,12 @@ class Experiment:
         self.target_race_count = {i[0]: 0 for i in constants.RACE}
         self.target_gender_race_count = {i: 0 for i in constants.GENDER_RACE_NAMES}
 
-        self.results = [{'bid_list': None, 'user': user} for user in self.ad_slot_list]
+        self.results = [{
+            'bid_list': None,
+            'user': user,
+            'race': user.race,
+            'gender': user.gender
+        } for user in self.ad_slot_list]
     
     def get_advertiser_list(self, advertiser_list):
         if advertiser_list is not None:
@@ -153,9 +166,12 @@ class Experiment:
                 random.shuffle(_user_list)
             else:
                 _user_list = [User(index=i, user_vrs_prob=self.user_vrs_prob) for i in range(no_of_users)]
-                if self.user_vrs_prob not in [1, None]:
-                    set_of_user_values = set([i.user_vrs_prob for i in _user_list])
-                    assert self.user_vrs_prob in set_of_user_values, 'User VRS probability has not been added to users.'
+
+            set_of_user_values = set([i.user_vrs_prob for i in _user_list])
+            if self.user_vrs_prob not in [1, None]:
+                assert self.user_vrs_prob in set_of_user_values, 'User VRS probability has not been added to users.'
+            else:
+                assert set_of_user_values == {1}, 'user_vrs_prob is None BUT vrs_prob is NOT 1 for all users.'
             return _user_list
         else:
             raise utilities.CustomError('Please specify either user_list or no_of_users.')
@@ -231,10 +247,14 @@ class Experiment:
 
         # Reset advertisers.
         self.advertiser_list = self.get_advertiser_list(advertiser_list=self.input_advertiser_list)
+        self.housing_adv_budget_exhausted = [False for _ in range(self.no_of_housing_advertisers)]
 
         # VRS-stuff.
-        vrs_over_bid = vrs.calc_p_percentile_bid(self.results[:], constants.P_TOP)
-        vrs_under_bid = vrs.calc_p_percentile_bid(self.results[:], constants.P_BOTTOM)
+        vrs_over_bid = vrs.calc_p_percentile_bid(self.results[:], self.p_top)
+        if self.adjust_down:
+            vrs_under_bid = vrs.calc_p_percentile_bid(self.results[:], self.p_bottom)
+        else:
+            vrs_under_bid = None
 
         # Run auction with VRS.
         self.simulate(
