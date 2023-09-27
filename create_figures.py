@@ -9,7 +9,7 @@ import constants
 import utilities
 
 
-FONT_SIZE = 12
+FONT_SIZE = 16
 FIGURE_DIMENSIONS = (12, 6)
 COLOUR_LIST = ['gold', 'darkorange', 'forestgreen', 'blue', 'black']
 
@@ -459,7 +459,7 @@ def create_housing_advertiser_mu_discrepancy_figure(results_dict, x_axis, h_mu, 
             _style = 'solid'
 
         _key = tuple(key.split('-'))
-        if _key in constants.USE_VRS_FOR_THESE_GROUPS:
+        if _key not in constants.PRIVILEGED_SUBGROUPS:
             _colour = 'pink'
             suffix = '(VRS applied)'
         else:
@@ -492,9 +492,13 @@ def get_counts_by_gender_and_race(results_dict):
     housing_gr = {f'{g}-{r}': 0 for g in constants.GENDER_NAMES for r in constants.RACE_NAMES}
     slots_won_due_to_vrs = {f'{g}-{r}': 0 for g in constants.GENDER_NAMES for r in constants.RACE_NAMES}
     amount_spent = 0
+    count = 0
+    # Iterate over each ad auction
     for r in results_dict:
+        # Only look at results up until the housing budget is exhausted.
         if amount_spent < constants.HOUSING_BUDGET:
             target_g, target_r, target_gr = update_counts(target_g, target_r, target_gr, r)
+
             if r['vrs_winner']['idx'] == 0:
                 housing_g, housing_r, housing_gr = update_counts(housing_g, housing_r, housing_gr, r)
                 amount_spent += r['vrs_winner']['price_paid']
@@ -502,4 +506,5 @@ def get_counts_by_gender_and_race(results_dict):
                     slots_won_due_to_vrs[f"{r['gender']}-{r['race']}"] += 1
         else:
             break
+        count += 1
     return target_g, target_r, target_gr, housing_g, housing_r, housing_gr, slots_won_due_to_vrs

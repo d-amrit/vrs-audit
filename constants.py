@@ -50,9 +50,10 @@ COMPLIANCE_REQUIREMENTS = [0.05, 0.1]
 
 # Experiment parameters
 HOUSING_BUDGET = 100
-SUPPORTED_AUCTION_TYPES = ['first', 'vcg', 'critical_bid']
+
+SUPPORTED_AUCTION_TYPES = ['first', 'second', 'vcg', 'critical_bid']
 SUPPORTED_VOTING_RULES = ['AND', 'OR', 'track-race-gender']
-USE_VRS_FOR_THESE_GROUPS = [('Male', 'White'), ('Female', 'African American')]
+PRIVILEGED_SUBGROUPS = [('Male', 'White'), ('Female', 'African American')]
 
 COLOR_LIST = ['blue', 'orange', 'green', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
 COLOR_LIST = [f'tab:{i}' for i in COLOR_LIST]

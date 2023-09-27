@@ -16,7 +16,8 @@ class User:
         self.gender = gender
 
         if user_vrs_prob is not None:
-            if (self.gender, self.race) in constants.USE_VRS_FOR_THESE_GROUPS:
+            # The idea is privileged subgroups are expensive, so we can use VRS on cheaper subgroups to meet compliance.
+            if (self.gender, self.race) not in constants.PRIVILEGED_SUBGROUPS:
                 self.user_vrs_prob = 1
             else:
                 self.user_vrs_prob = user_vrs_prob

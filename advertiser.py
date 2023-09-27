@@ -51,15 +51,13 @@ class Advertiser:
             self.metas_race_count[race[0]] = 0
             self.race_var_sign[race[0]] = 0
 
-        self.iteration_count = 0
-
     def calc_user_based_bid(self, user):
         # TODO (2/2): Find cleaner way to allow them to vary their bid by user demographic.
 
         # Non-housing advertiser's vary their bids by diff based on race-gender.
         non_housing = not self.protected_domain
         diff_defined = self.diff is not None
-        user_in_selected_groups = (user.gender, user.race) not in constants.USE_VRS_FOR_THESE_GROUPS
+        user_in_selected_groups = (user.gender, user.race) in constants.PRIVILEGED_SUBGROUPS
         if non_housing and diff_defined and user_in_selected_groups:
             assert self.male_mu == self.female_mu, 'For testing purposes, if we use diff, we do not want them to be' \
                                                    ' different but they are. Please change this!'
