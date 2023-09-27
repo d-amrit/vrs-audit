@@ -20,9 +20,9 @@ def voting_rule(gender_sign, race_sign, voting_rule_logic):
     if voting_rule_logic == 'AND':
         # Only if both over/under-served report, over/under-served.
         total_sum = gender_sign + race_sign
-        if total_sum == 2:
+        if total_sum >= 1:  # previously 2
             return 1
-        elif total_sum == -2:
+        elif total_sum < 0:  # previously -2
             return -1
         else:
             return 0
@@ -39,12 +39,14 @@ def voting_rule(gender_sign, race_sign, voting_rule_logic):
     return 0
 
 
-def calc_p_percentile_bid(results_without_vrs, percentile_value, multiply_by=100):
+def calc_p_percentile_bid(results_without_vrs, percentile_value, multiply_by=100, exclude_housing=False):
     """
-    We find the P_TOP percentile of winning bids. This is the bid that ensures the
+    We find the percentile_value of winning bids.
     """
-    winning_bid_list = [i['winner']['true_bid'] for i in results_without_vrs if
-                        not i['winner']['protected_domain']]
+    if exclude_housing:
+        results_without_vrs = [i for i in results_without_vrs if not i['winner']['protected_domain']]
+
+    winning_bid_list = [i['winner']['true_bid'] for i in results_without_vrs]
     p_top_bid = np.percentile(winning_bid_list, percentile_value * multiply_by)
     return p_top_bid
 
