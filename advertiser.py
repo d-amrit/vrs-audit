@@ -90,6 +90,8 @@ class Advertiser:
             true_bid = self.calc_user_based_bid(user)
 
         true_bid = true_bid * vrs_multiplier
+        # Here we are retaining the {vrs_over_bid, vrs_under_bid} to allow for constraints on how large/small we are
+        # allowed to make an advertiser's bid.
         if vrs_over_bid is not None:
             true_bid = min(true_bid, vrs_over_bid)
         if vrs_under_bid is not None:

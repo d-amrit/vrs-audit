@@ -1,4 +1,5 @@
 import utilities
+import vrs
 
 
 class Auction:
@@ -6,8 +7,7 @@ class Auction:
     We are going to follow the AdWord model. At every step, a user with certain characteristics appears. We then
     hold an auction for this ad slot.
     """
-    def __init__(self, advertiser_list, user, normalize_bid=False, auction_type='first',
-                 voting_rule_logic='AND-inclusive'):
+    def __init__(self, advertiser_list, user, auction_type, voting_rule_logic, normalize_bid=False):
         self.advertiser_list = self.get_relevant_advertisers(advertiser_list)
         self.user = user
         self.normalize_bid = normalize_bid
@@ -18,36 +18,6 @@ class Auction:
     def get_relevant_advertisers(advertiser_list):
         # TODO: We may want to use only a subset of advertisers from all possible advertisers?
         return advertiser_list
-
-    @staticmethod
-    def calc_est_action_rate(advertiser):
-        # TODO: Implement.
-        return advertiser.est_action_rate
-
-    @staticmethod
-    def calc_quality_score(advertiser):
-        # TODO: Implement.
-        return advertiser.quality_score
-
-    def calc_bid_for_each_advertiser(self, advertiser, true_bid=None, vrs_over_bid=None, vrs_under_bid=None):
-        # Calculated by the platform but dependent on advertiser inputs (e.g. budget).
-        if true_bid is None:
-            true_bid = advertiser.calc_user_based_bid(self.user)
-
-        if vrs_over_bid is not None:
-            true_bid = max(true_bid, vrs_over_bid)
-        elif vrs_under_bid is not None:
-            true_bid = min(true_bid, vrs_under_bid)
-
-        # Calculated by the platform.
-        quality_bid = self.calc_quality_score(advertiser)
-        est_action_rate = self.calc_est_action_rate(advertiser)
-
-        advertiser_component = est_action_rate * true_bid
-        total_score = advertiser_component + quality_bid
-
-        # We pick winners based on the normalized bid and charge the winner their true bid.
-        return advertiser.index, total_score, true_bid
 
     @staticmethod
     def allocation_rule(adv_score_in_des_order):
@@ -126,29 +96,30 @@ class Auction:
 
         return _min_bid
 
-    def use_vrs_to_adjust_advertisers_bids(self, bid_list, vrs_over_bid, vrs_under_bid):
+    def calc_vrs_adjusted_bids_for_protected_advertisers(self, bid_list, vrs_over_bid, vrs_under_bid):
         """
-        We iterate over the bid list. For each advertiser who is both: (a) from a protected domain AND (b) {under, over}
-        served the demographic to which this user belongs, we set the the advertiser's bid to vrs_adj_bid.
+        We iterate over the bid list. For each advertiser who is from a protected domain, we adjust their bid using
+        the current vrs_multiplier value.
 
-        vrs_adj_bid can be higher or lower depending on what needs to be achieved.
-
-        # TODO: If we want to move this to vrs.py, we would need to move calc_bid_for_each_advertiser as a method of
-        the Advertiser class.
+        2023-11-28: We are removing the code that says:
+            1. Check if the demographic is over/under-served.
+            2. If over (resp. under) then set true_bid to vrs_over_bid (resp. vrs_under_bid). Easy to implement this
+               logic, check _adv.is_demographic_under_or_over_served(user=self.user, voting_rule_logic=
+               self.voting_rule_logic) then only pass vrs_over_bid (resp. vrs_under_bid) leave the other undefined.
         """
         vrs_bid_list = bid_list[:]
         for idx, bid_tuple in enumerate(vrs_bid_list):
             _, _, true_bid = bid_tuple
             _adv = self.advertiser_list[idx]
             if _adv.protected_domain:
-                _over_under_served = _adv.is_demographic_under_or_over_served(user=self.user,
-                                                                              voting_rule_logic=self.voting_rule_logic)
-                if _over_under_served == 'under':
-                    vrs_bid_list[idx] = self.calc_bid_for_each_advertiser(_adv, true_bid=true_bid,
-                                                                          vrs_over_bid=vrs_over_bid)
-                elif _over_under_served == 'over' and vrs_under_bid is not None:
-                    vrs_bid_list[idx] = self.calc_bid_for_each_advertiser(_adv, true_bid=true_bid,
-                                                                          vrs_under_bid=vrs_under_bid)
+                vrs_bid_list[idx] = vrs.use_vrs_to_adjust_advertisers_bids(
+                    advertiser=_adv,
+                    user=self.user,
+                    voting_rule_logic=self.voting_rule_logic,
+                    true_bid=true_bid,
+                    vrs_over_bid=vrs_over_bid,
+                    vrs_under_bid=vrs_under_bid
+                )
         return vrs_bid_list
 
     def run_auction(self, bid_list):
@@ -168,14 +139,13 @@ class Auction:
 
     def run(self, bid_list=None, apply_vrs=False, vrs_over_bid=None, vrs_under_bid=None):
         if bid_list is None:
-            bid_list = [self.calc_bid_for_each_advertiser(a) for a in self.advertiser_list]
+            bid_list = [adv.calc_bid_for_each_advertiser(user=self.user) for adv in self.advertiser_list]
         if apply_vrs:
-            bid_list = self.use_vrs_to_adjust_advertisers_bids(
+            bid_list = self.calc_vrs_adjusted_bids_for_protected_advertisers(
                 bid_list=bid_list,
                 vrs_over_bid=vrs_over_bid,
                 vrs_under_bid=vrs_under_bid
             )
 
         winner = self.run_auction(bid_list)
-
         return winner, bid_list

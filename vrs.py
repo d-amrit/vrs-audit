@@ -6,6 +6,37 @@ from imprecise_bisg_with_dp import ImpreciseBISGwithDP
 import constants
 
 
+def agg_vrs_multiplier(multiplier_list, voting_rule_logic):
+    return voting_rule_logic(multiplier_list)
+
+
+def use_vrs_to_adjust_advertisers_bids(advertiser, user, voting_rule_logic, true_bid, vrs_over_bid, vrs_under_bid):
+    """
+    We iterate over the bid list. For each advertiser who is from a protected domain, we adjust their bid using
+    the current vrs_multiplier value.
+
+    2023-11-28: We are removing the code that says:
+        1. Check if the demographic is over/under-served.
+        2. If over (resp. under) then set true_bid to vrs_over_bid (resp. vrs_under_bid). Easy to implement this
+           logic, check _adv.is_demographic_under_or_over_served(user=self.user, voting_rule_logic=
+           self.voting_rule_logic) then only pass vrs_over_bid (resp. vrs_under_bid) leave the other undefined.
+    """
+    _demographics = [getattr(user, group) for group in constants.DEMOGRAPHICS_TRACKED]
+    _multiplier_list = [advertiser.vrs_multiplier[subgroup] for subgroup in _demographics]
+    _multiplier = agg_vrs_multiplier(
+        multiplier_list=_multiplier_list,
+        voting_rule_logic=voting_rule_logic
+    )
+    adjusted_bid = advertiser.calc_bid_for_each_advertiser(
+        user=user,
+        true_bid=true_bid,
+        vrs_multiplier=_multiplier,
+        vrs_over_bid=vrs_over_bid,
+        vrs_under_bid=vrs_under_bid
+    )
+    return adjusted_bid
+
+
 def voting_rule(gender_sign, race_sign, voting_rule_logic):
     """
     Both gender_sign and race_sign can take 3 values:

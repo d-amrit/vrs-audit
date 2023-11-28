@@ -28,7 +28,7 @@ class Experiment:
     1. To compare impressions vs users, we can create a original and fake index so we don't need to change the code.
     """
 
-    def __init__(self, random_state=0, auction_type='first',
+    def __init__(self, random_state=0, auction_type='critical_bid',
                  advertiser_list=None, no_of_housing_advertisers=1,
                  no_of_non_housing_advertisers=1,
                  housing_budget=100, non_housing_budget=1000,
@@ -38,9 +38,15 @@ class Experiment:
                  non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8,
                  non_housing_diff=None,
                  user_list=None, no_of_users=40_000, ad_slot_per_user=1,
-                 user_vrs_prob=None, voting_rule_logic='AND-inclusive',
+                 user_vrs_prob=None, voting_rule_logic='max',
                  calc_gender_var=True, calc_race_var=True, use_noisy_bisg=False,
                  adjust_down=False, batch_size=10, p_top=constants.P_TOP, p_bottom=constants.P_BOTTOM):
+        """
+        user_vrs_prob is the probability with which VRS is applied to a specific user. For now, this is group-based,
+        and allows us to specify "use VRS to win 'cheaper' groups" to satisfy compliance. If user_vrs_prob = 0, then
+        we _never_ use VRS to win a slot for the user. Similarly, if user_vrs_prob = 1, then we use VRS _as appropriate_
+         to win a slot for the user.
+        """
 
         # Initializing random state for replication purposes.
         utilities.initialize_random_state(random_state)
@@ -56,14 +62,11 @@ class Experiment:
                                                                       f"{_voting_rules} auction types are supported."
         self.voting_rule_logic = voting_rule_logic
 
-        # VRS
-        self.vrs_class = vrs.VarianceReductionSystem(
-            calc_gender_var=calc_gender_var,
-            calc_race_var=calc_race_var,
-            batch_size=batch_size,
-            use_noisy_bisg=use_noisy_bisg,
-            adjust_down=adjust_down,
-        )
+        # VRS-specific variables.
+        self.calc_gender_var = calc_gender_var
+        self.calc_race_var = calc_race_var
+        self.batch_size = batch_size
+        self.use_noisy_bisg = use_noisy_bisg
         self.p_top = p_top
         self.p_bottom = p_bottom
         self.adjust_down = adjust_down
@@ -133,7 +136,13 @@ class Experiment:
                     female_mu=self.housing_value_mu,
                     male_sigma=self.housing_value_sigma,
                     female_sigma=self.housing_value_sigma,
-                    vrs_class=self.vrs_class
+                    vrs_class=vrs.VarianceReductionSystem(
+                        calc_gender_var=self.calc_gender_var,
+                        calc_race_var=self.calc_race_var,
+                        batch_size=self.batch_size,
+                        use_noisy_bisg=self.use_noisy_bisg,
+                        adjust_down=self.adjust_down
+                    )
                 ) for i in range(self.no_of_housing_advertisers)]
             non_housing = [
                 Advertiser(
@@ -288,6 +297,7 @@ class Experiment:
                                                          f'iteration {iteration}.'
 
     def _get_list_of_idx_of_vrs_winner(self):
+        # Used in test_var_sign method.
         # Get list of indices for ad slots that the housing advertiser won.
         count = 0
         idx_list = []

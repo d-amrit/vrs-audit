@@ -52,7 +52,8 @@ COMPLIANCE_REQUIREMENTS = [0.05, 0.1]
 HOUSING_BUDGET = 100
 
 SUPPORTED_AUCTION_TYPES = ['first', 'second', 'vcg', 'critical_bid']
-SUPPORTED_VOTING_RULES = ['AND-inclusive', 'AND-exclusive', 'OR', 'track-race-gender']
+SUPPORTED_VOTING_RULES = ['min', 'max', 'average']
+DEPRECATED_VOTING_RULES = ['AND-inclusive', 'AND-exclusive', 'OR', 'track-race-gender']
 PRIVILEGED_SUBGROUPS = [('Male', 'White'), ('Female', 'Black')]
 
 COLOR_LIST = ['blue', 'orange', 'green', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
@@ -62,6 +63,7 @@ OVER_UNDER_SERVED_MAP = {
     0: None,
     -1: 'under'
 }
+DEMOGRAPHICS_TRACKED = ['race', 'gender']
 GROUPS_TO_SUBGROUPS = {
     'race': RACE_NAMES,
     'gender': GENDER_NAMES
