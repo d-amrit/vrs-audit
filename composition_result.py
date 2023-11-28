@@ -8,7 +8,7 @@ import constants
 
 
 class CompositionResult:
-    def __init__(self, experiment_params, 
+    def __init__(self, experiment_params,
                  x_var_name,  x_axis, x_label,
                  series_var_name, series_list, series_label,
                  exp_id=None):
@@ -32,8 +32,6 @@ class CompositionResult:
         self.tvd_dict = {series: {'Gender': [], 'Race': [], 'Gender-Race': []} for series in series_list}
         self.max_discrepancy_dict = {series: [] for series in series_list}
 
-        # Revenue
-
     def simulate_single_experiment(self, x, series):
         self.experiment_params[self.x_var_name] = x
         self.experiment_params[self.series_var_name] = series
@@ -43,15 +41,20 @@ class CompositionResult:
 
     def calc_tvd_for_demographic_groups(self, e, series):
         # Get counts by gender and race for target and actual audience.
-        _r = create_figures.get_counts_by_gender_and_race(e.results)
-        target_g, target_r, target_gr, housing_g, housing_r, housing_gr, slots_won_due_to_vrs = _r
+        agg_data = create_figures.get_counts_and_revenue_by_demographic(e.results)
 
         # Calculate TVD by gender and race.
-        self.tvd_dict[series]['Gender'].append(utilities.calc_total_variation_distance(target_g, housing_g))
-        self.tvd_dict[series]['Race'].append(utilities.calc_total_variation_distance(target_r, housing_r))
-        self.tvd_dict[series]['Gender-Race'].append(utilities.calc_total_variation_distance(target_gr, housing_gr))
+        self.tvd_dict[series]['Gender'].append(
+            utilities.calc_total_variation_distance(agg_data['target_g'], agg_data['vrs_h_count_g'])
+        )
+        self.tvd_dict[series]['Race'].append(
+            utilities.calc_total_variation_distance(agg_data['target_r'], agg_data['vrs_h_count_r'])
+        )
+        self.tvd_dict[series]['Gender-Race'].append(
+            utilities.calc_total_variation_distance(agg_data['target_gr'], agg_data['vrs_h_count_gr'])
+        )
 
-        return housing_gr, slots_won_due_to_vrs
+        return agg_data['vrs_h_count_gr'], agg_data['slots_won_due_to_vrs'], agg_data['red_in_rev']
 
     def calc_perc_housing_audience_by_demographic(self, housing_gr, series):
         housing_gr_p = utilities.convert_count_dict_to_list_of_perc(housing_gr, return_dict=True)
@@ -74,13 +77,14 @@ class CompositionResult:
         for series in self.series_list:
             for x in self.x_axis:
                 e = self.simulate_single_experiment(x, series)
-
-                housing_audience_by_gender_and_race, slots_won_due_to_vrs = \
+                # print(f'{self.series_var_name} = {series}, {self.x_var_name} = {x}')
+                housing_audience_by_gender_and_race, slots_won_due_to_vrs, red_in_rev = \
                     self.calc_tvd_for_demographic_groups(e, series)
                 self.calc_perc_housing_audience_by_demographic(housing_audience_by_gender_and_race, series)
 
                 self.calc_perc_housing_slots_won_due_to_vrs(housing_audience_by_gender_and_race,
                                                             slots_won_due_to_vrs, series)
+                # print('-'*100)
 
     def create_figures(self):
         # Weirdly, if we set custom_color_and_style to False/True instead of 0/1, it flips it.
@@ -108,18 +112,18 @@ class CompositionResult:
                 'key_filter': 'Male'
             },
             # # TODO: What's happening here? Some of the series drop off. Certain users receive no ads!
-            # {
-            #     'y_label': "% of ad slots won due to VRS",
-            #     'set_yaxis_as_percent': True,
-            #     'data_dict': self.slots_won_due_to_vrs_p,
-            #     'custom_color_and_style': 2,
-            #     'file_name': 'Percent of ad slots won due to VRS',
-            #     'y_lim': None,
-            #     # 'skip': self.exp_id is not None,
-            #     'skip': False,
-            #     'grid': False,
-            #     'key_filter': 'Male'
-            # },
+            {
+                'y_label': "% of ad slots won due to VRS",
+                'set_yaxis_as_percent': True,
+                'data_dict': self.slots_won_due_to_vrs_p,
+                'custom_color_and_style': 2,
+                'file_name': 'Percent of ad slots won due to VRS',
+                'y_lim': None,
+                # 'skip': self.exp_id is not None,
+                'skip': False,
+                'grid': False,
+                'key_filter': 'Male'
+            },
             {
                 'y_label': "Max discrepancy between same gender (resp. race) \n across different race (resp. gender)",
                 'set_yaxis_as_percent': True,
@@ -245,6 +249,7 @@ class CompositionResult:
             return f'{key} ({self.series_label} = {series})'
 
     def _add_plot_lines(self, file_name):
+        return
         if file_name == 'TVD by gender and race vs Diff between mu':
             for c in constants.COMPLIANCE_REQUIREMENTS:
                 _label = f'{int(c * 100)}% compliance'
@@ -268,7 +273,7 @@ class CompositionResult:
                 plt.text(-2.25, 51, "~50% of housing advertiser's actual audience", fontsize=create_figures.FONT_SIZE)
 
         # elif file_name == 'VRS prevents us from creating a 0-50 counterexample':
-        #     plt.text(4, 39, 'Male-Black and Female-White \nusers receive all their ad slots \ndue to VRS.',
+        #     plt.text(4, 39, 'Male-Black and Female-White \n users receive all their ad slots \n due to VRS.',
         #              fontsize=create_figures.FONT_SIZE)
 
         if self.exp_id == 'vary_only_along_gender_lines':
