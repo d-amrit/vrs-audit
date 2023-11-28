@@ -13,9 +13,9 @@ class Advertiser:
         self.index = index
         self.protected_domain = protected_domain
         self.budget = budget
+        # TODO: Add functions calc_est_action_rate(user) and calc_quality_score(user) that allow this to vary by user.
         self.est_action_rate = est_action_rate
         self.quality_score = quality_score
-
         self.vrs_class = vrs_class
 
         # TODO (1/2): I really don't like this. We need a cleaner way to allow bids to vary by user demographic.
@@ -51,6 +51,9 @@ class Advertiser:
             self.metas_race_count[race[0]] = 0
             self.race_var_sign[race[0]] = 0
 
+        # TODO: Review. I think this is okay. Just read from constants.
+        self.vrs_multiplier = {subgroup: 1 for subgroup in constants.SUBGROUP_FREQUENCY.keys()}
+
     def calc_user_based_bid(self, user):
         # TODO (2/2): Find cleaner way to allow them to vary their bid by user demographic.
 
@@ -71,6 +74,34 @@ class Advertiser:
             raise utilities.CustomError(f"Gender {user.gender} not supported. Please use 'Male' or 'Female'.")
 
         return bid
+
+    def calc_est_action_rate(self):
+        # TODO: Implement. We possibly want this to vary by user.
+        return self.est_action_rate
+
+    def calc_quality_score(self):
+        # TODO: Implement. We possibly want this to vary by user.
+        return self.quality_score
+
+    def calc_bid_for_each_advertiser(self, user, true_bid=None, vrs_multiplier=1,
+                                     vrs_over_bid=None, vrs_under_bid=None):
+        # Calculated by the platform but dependent on advertiser inputs (e.g. budget).
+        if true_bid is None:
+            true_bid = self.calc_user_based_bid(user)
+
+        true_bid = true_bid * vrs_multiplier
+        if vrs_over_bid is not None:
+            true_bid = min(true_bid, vrs_over_bid)
+        if vrs_under_bid is not None:
+            true_bid = max(true_bid, vrs_under_bid)
+
+        quality_score = self.calc_quality_score()
+        est_action_rate = self.calc_est_action_rate()
+        advertiser_component = est_action_rate * true_bid
+        total_score = advertiser_component + quality_score
+
+        # We pick winners based on the normalized bid and charge the winner their true bid.
+        return self.index, total_score, true_bid
 
     def is_demographic_under_or_over_served(self, user, voting_rule_logic):
         if voting_rule_logic == 'track-race-gender':
