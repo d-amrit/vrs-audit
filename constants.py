@@ -16,13 +16,13 @@ GENDER_NAMES = [i[0] for i in GENDER]
 # RACE = [
 #     ('White', 0.589),
 #     ('Hispanic', 0.191),
-#     ('African American', 0.136)
+#     ('Black', 0.136)
 # ]
 # other_perc = round(1 - sum([i[1] for i in RACE]), 3)
 # RACE.append(('Other', other_perc))
 RACE = [
     ('White', 0.5),
-    ('African American', 0.5)
+    ('Black', 0.5)
 ]
 RACE_IDX = {race[0]: idx for idx, race in enumerate(RACE)}
 NO_OF_RACES = len(RACE)
@@ -53,7 +53,7 @@ HOUSING_BUDGET = 100
 
 SUPPORTED_AUCTION_TYPES = ['first', 'second', 'vcg', 'critical_bid']
 SUPPORTED_VOTING_RULES = ['AND-inclusive', 'AND-exclusive', 'OR', 'track-race-gender']
-PRIVILEGED_SUBGROUPS = [('Male', 'White'), ('Female', 'African American')]
+PRIVILEGED_SUBGROUPS = [('Male', 'White'), ('Female', 'Black')]
 
 COLOR_LIST = ['blue', 'orange', 'green', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
 COLOR_LIST = [f'tab:{i}' for i in COLOR_LIST]
@@ -61,4 +61,14 @@ OVER_UNDER_SERVED_MAP = {
     1: 'over',
     0: None,
     -1: 'under'
+}
+GROUPS_TO_SUBGROUPS = {
+    'race': RACE_NAMES,
+    'gender': GENDER_NAMES
+}
+SUBGROUP_FREQUENCY = {
+    'White': 0.5,
+    'Black': 0.5,
+    'Male': 0.5,
+    'Female': 0.5
 }
