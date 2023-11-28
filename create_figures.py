@@ -31,9 +31,11 @@ def create_chart_outline(x_label, y_label, set_yaxis_as_percent=False, title=Non
     return ax
 
 
-def save_figure(file_name, legend=None):
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')
-    file_path = os.path.join(constants.SAVE_PATH, f'{file_name}_{timestamp}.png')
+def save_figure(file_name, legend=None, add_timestamp=False):
+    if add_timestamp:
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')
+        file_name = f'{file_name}_{timestamp}'
+    file_path = os.path.join(constants.SAVE_PATH, f'{file_name}.png')
     if legend is not None:
         plt.savefig(file_path, dpi=400, bbox_extra_artists=(legend,), bbox_inches='tight')
     else:
@@ -290,11 +292,11 @@ def code_we_used_to_demonstrate_that_vrs_creates_diff(list_of_results, batch_siz
     plt.show()
 
 
-def update_counts(g_count, r_count, gr_count, result):
-    g_count[result['gender']] += 1
-    r_count[result['race']] += 1
+def update_counts(g_count, r_count, gr_count, result, increment_by=1):
+    g_count[result['gender']] += increment_by
+    r_count[result['race']] += increment_by
     r_g = f"{result['gender']}-{result['race']}"
-    gr_count[r_g] += 1
+    gr_count[r_g] += increment_by
     return g_count, r_count, gr_count
 
 
@@ -483,28 +485,149 @@ def create_housing_advertiser_mu_discrepancy_figure(results_dict, x_axis, h_mu, 
     plt.show()
 
 
-def get_counts_by_gender_and_race(results_dict):
-    target_g = {g: 0 for g in constants.GENDER_NAMES}
-    target_r = {g: 0 for g in constants.RACE_NAMES}
-    target_gr = {f'{g}-{r}': 0 for g in constants.GENDER_NAMES for r in constants.RACE_NAMES}
-    housing_g = {g: 0 for g in constants.GENDER_NAMES}
-    housing_r = {g: 0 for g in constants.RACE_NAMES}
-    housing_gr = {f'{g}-{r}': 0 for g in constants.GENDER_NAMES for r in constants.RACE_NAMES}
-    slots_won_due_to_vrs = {f'{g}-{r}': 0 for g in constants.GENDER_NAMES for r in constants.RACE_NAMES}
-    amount_spent = 0
-    count = 0
+def initialize_metric_dicts_for_gender_race():
+    by_gender = {i: 0 for i in constants.GENDER_NAMES}
+    by_race = {i: 0 for i in constants.RACE_NAMES}
+    by_gender_race = {i: 0 for i in constants.GENDER_RACE_NAMES}
+    return by_gender, by_race, by_gender_race
+
+
+def update_metric_dict(agg_data, auction_results, prefix, metric, increment_by):
+    _g, _r, _gr = f'{prefix}h_{metric}_g', f'{prefix}h_{metric}_r', f'{prefix}h_{metric}_gr'
+    agg_data[_g], agg_data[_r], agg_data[_gr] = update_counts(agg_data[_g], agg_data[_r], agg_data[_gr], 
+                                                              auction_results, increment_by)
+    return agg_data
+
+
+def calc_reduction_in_rev(without_vrs, with_vrs, reduction_dict, key):
+    revenue_without_vrs = without_vrs[key]
+    revenue_with_vrs = with_vrs[key]
+    if revenue_without_vrs == 0:
+        _red = np.nan
+    else:
+        _red = ((revenue_without_vrs - revenue_with_vrs) * 100) / revenue_without_vrs
+    reduction_dict[key] = _red
+    return reduction_dict
+
+
+def calc_cost_per_ad_slot(count_dict, revenue_dict, avg_cost_dict, key):
+    if count_dict[key] == 0:
+        _avg = np.nan
+    else:
+        _avg = revenue_dict[key] / count_dict[key]
+    avg_cost_dict[key] = _avg
+    return avg_cost_dict
+
+
+def get_counts_and_revenue_by_demographic(results_dict):
+    # Demographic break up of all users seen.
+    target_g, target_r, target_gr = initialize_metric_dicts_for_gender_race()
+
+    # Slots won due to VRS by race and gender.
+    slots_won_due_to_vrs = {i: 0 for i in constants.GENDER_RACE_NAMES}
+    avg_cost_gr = {i: 0 for i in constants.GENDER_RACE_NAMES}
+
+    # Number of housing and non-housing ad slots shown to each each demographic without and with VRS
+    vrs_h_count_g, vrs_h_count_r, vrs_h_count_gr = initialize_metric_dicts_for_gender_race()
+
+    # Housing and non-housing ad dollars spent on each demographic without and with VRS
+    vrs_h_spend_g, vrs_h_spend_r, vrs_h_spend_gr = initialize_metric_dicts_for_gender_race()
+
+    # Calculate reduction in revenue
+    rev_g, rev_r, rev_gr = initialize_metric_dicts_for_gender_race()
+    vrs_rev_g, vrs_rev_r, vrs_rev_gr = initialize_metric_dicts_for_gender_race()
+    red_rev_g, red_rev_r, red_rev_gr = initialize_metric_dicts_for_gender_race()
+
+    agg_data = {
+        # Demographic distribution of all ad slots.
+        'target_g': target_g,
+        'target_r': target_r,
+        'target_gr': target_gr,
+
+        # Ad slots by demographic.
+        'vrs_h_count_g': vrs_h_count_g,
+        'vrs_h_count_r': vrs_h_count_r,
+        'vrs_h_count_gr': vrs_h_count_gr,
+
+        'vrs_h_spend_g': vrs_h_spend_g,
+        'vrs_h_spend_r': vrs_h_spend_r,
+        'vrs_h_spend_gr': vrs_h_spend_gr,
+
+        # Reduction in revenue
+        # 'red_rev_g': red_rev_g,
+        # 'red_rev_r': red_rev_r,
+        'red_rev_gr': red_rev_gr,
+        'avg_cost_gr': avg_cost_gr,
+
+        # Total count and revenue for housing and non-housing ads. 
+        'housing_spend': 0,
+        'vrs_housing_spend': 0,
+        'slots_won_due_to_vrs': slots_won_due_to_vrs,
+    }
+
+    revenue_without_vrs = 0
+    revenue_with_vrs = 0
     # Iterate over each ad auction
     for r in results_dict:
-        # Only look at results up until the housing budget is exhausted.
-        if amount_spent < constants.HOUSING_BUDGET:
-            target_g, target_r, target_gr = update_counts(target_g, target_r, target_gr, r)
+        # TODO: Generalize to allow multiple housing advertisers.
+        # Only look at results up until the housing budget without VRS is exhausted.
+        # vrs_h_count_{g, r, gr}, slots_won_due_to_vrs
+        if agg_data['housing_spend'] < constants.HOUSING_BUDGET:
+            if r['winner']['idx'] == 0:
+                # Keep track of amount spent by housing advertiser with VRS applied.
+                agg_data['housing_spend'] += r['winner']['price_paid']
 
-            if r['vrs_winner']['idx'] == 0:
-                housing_g, housing_r, housing_gr = update_counts(housing_g, housing_r, housing_gr, r)
-                amount_spent += r['vrs_winner']['price_paid']
-                if r['vrs_winner']['idx'] != r['winner']['idx']:
-                    slots_won_due_to_vrs[f"{r['gender']}-{r['race']}"] += 1
-        else:
-            break
-        count += 1
-    return target_g, target_r, target_gr, housing_g, housing_r, housing_gr, slots_won_due_to_vrs
+            agg_data['target_g'], agg_data['target_r'], agg_data['target_gr'] = \
+                update_counts(agg_data['target_g'], agg_data['target_r'], agg_data['target_gr'], r)
+
+            if agg_data['vrs_housing_spend'] < constants.HOUSING_BUDGET:
+                rev_g, rev_r, rev_gr = update_counts(rev_g, rev_r, rev_gr, r, increment_by=r['winner']['price_paid'])
+                vrs_rev_g, vrs_rev_r, vrs_rev_gr = update_counts(vrs_rev_g, vrs_rev_r, vrs_rev_gr, r,
+                                                                 increment_by=r['vrs_winner']['price_paid'])
+
+                # Overall reduction in revenue
+                revenue_without_vrs += r['winner']['price_paid']
+                revenue_with_vrs += r['vrs_winner']['price_paid']
+
+                if r['vrs_winner']['idx'] == 0:
+                    # Keep track of amount spent by housing advertiser with VRS applied.
+                    agg_data['vrs_housing_spend'] += r['vrs_winner']['price_paid']
+
+                    # Update count of ad slots won by the housing advertiser with VRS.
+                    agg_data['vrs_h_count_g'], agg_data['vrs_h_count_r'], agg_data['vrs_h_count_gr'] = \
+                        update_counts(agg_data['vrs_h_count_g'], agg_data['vrs_h_count_r'], 
+                                      agg_data['vrs_h_count_gr'], r)
+
+                    # Update housing advertiser's expenditure with VRS.
+                    agg_data['vrs_h_spend_g'], agg_data['vrs_h_spend_r'], agg_data['vrs_h_spend_gr'] = \
+                        update_counts(agg_data['vrs_h_spend_g'], agg_data['vrs_h_spend_r'],
+                                      agg_data['vrs_h_spend_gr'], r, increment_by=r['vrs_winner']['price_paid'])
+
+                    # Update count and revenue when VRS winner != Winner
+                    if r['vrs_winner']['idx'] != 0:
+                        slots_won_due_to_vrs[f"{r['gender']}-{r['race']}"] += 1
+
+    agg_data['red_in_rev'] = round(((revenue_without_vrs - revenue_with_vrs) * 100) / revenue_without_vrs, 2)
+
+    # for gender in constants.GENDER_NAMES:
+    #     calc_reduction_in_rev(without_vrs=rev_g, with_vrs=vrs_rev_g, reduction_dict=agg_data['red_rev_g'], key=gender)
+    #
+    # for race in constants.RACE_NAMES:
+    #     calc_reduction_in_rev(without_vrs=rev_r, with_vrs=vrs_rev_r, reduction_dict=agg_data['red_rev_r'], key=race)
+
+    for gr in constants.GENDER_RACE_NAMES:
+        agg_data['red_rev_gr'] = calc_reduction_in_rev(
+            without_vrs=rev_gr,
+            with_vrs=vrs_rev_gr,
+            reduction_dict=agg_data['red_rev_gr'],
+            key=gr
+        )
+
+        agg_data['avg_cost_gr'] = calc_cost_per_ad_slot(
+            count_dict=agg_data['vrs_h_count_gr'],
+            revenue_dict=agg_data['vrs_h_spend_gr'],
+            avg_cost_dict=agg_data['avg_cost_gr'],
+            key=gr
+        )
+
+    return agg_data
