@@ -38,9 +38,10 @@ class Experiment:
                  non_housing_value_female_mu=-4.4, non_housing_value_female_sigma=0.8,
                  non_housing_diff=None,
                  user_list=None, no_of_users=40_000, ad_slot_per_user=1,
-                 user_vrs_prob=None, voting_rule_logic='max',
+                 user_vrs_prob=None, voting_rule_logic=max,
                  calc_gender_var=True, calc_race_var=True, use_noisy_bisg=False,
-                 adjust_down=False, batch_size=10, p_top=constants.P_TOP, p_bottom=constants.P_BOTTOM):
+                 adjust_down=False, batch_size=10, p_top=constants.P_TOP, p_bottom=constants.P_BOTTOM,
+                 increment_step_size=0.1, decrement_step_size=0.1):
         """
         user_vrs_prob is the probability with which VRS is applied to a specific user. For now, this is group-based,
         and allows us to specify "use VRS to win 'cheaper' groups" to satisfy compliance. If user_vrs_prob = 0, then
@@ -67,9 +68,11 @@ class Experiment:
         self.calc_race_var = calc_race_var
         self.batch_size = batch_size
         self.use_noisy_bisg = use_noisy_bisg
+        self.adjust_down = adjust_down
         self.p_top = p_top
         self.p_bottom = p_bottom
-        self.adjust_down = adjust_down
+        self.increment_step_size = increment_step_size
+        self.decrement_step_size = decrement_step_size
 
         # Advertisers
         self.no_of_housing_advertisers = no_of_housing_advertisers
@@ -141,7 +144,9 @@ class Experiment:
                         calc_race_var=self.calc_race_var,
                         batch_size=self.batch_size,
                         use_noisy_bisg=self.use_noisy_bisg,
-                        adjust_down=self.adjust_down
+                        adjust_down=self.adjust_down,
+                        increment_step_size=self.increment_step_size,
+                        decrement_step_size=self.decrement_step_size
                     )
                 ) for i in range(self.no_of_housing_advertisers)]
             non_housing = [

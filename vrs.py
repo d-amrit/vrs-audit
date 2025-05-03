@@ -22,7 +22,7 @@ def use_vrs_to_adjust_advertisers_bids(advertiser, user, voting_rule_logic, true
            self.voting_rule_logic) then only pass vrs_over_bid (resp. vrs_under_bid) leave the other undefined.
     """
     _demographics = [getattr(user, group) for group in constants.DEMOGRAPHICS_TRACKED]
-    _multiplier_list = [advertiser.vrs_multiplier[subgroup] for subgroup in _demographics]
+    _multiplier_list = [advertiser.vrs_multiplier_subgroup_map[subgroup] for subgroup in _demographics]
     _multiplier = agg_vrs_multiplier(
         multiplier_list=_multiplier_list,
         voting_rule_logic=voting_rule_logic
@@ -90,24 +90,26 @@ def calc_p_percentile_bid(results_without_vrs, percentile_value, multiply_by=100
 
 class VarianceReductionSystem:
     def __init__(self, calc_gender_var, calc_race_var, batch_size,
-                 use_noisy_bisg=False, adjust_down=False):
+                 use_noisy_bisg=False, adjust_down=False,
+                 increment_step_size=0.1, decrement_step_size=0.1):
         self.calc_gender_var = calc_gender_var
         self.calc_race_var = calc_race_var
         self.batch_size = batch_size
-
         self.use_noisy_bisg = use_noisy_bisg
         self.adjust_down = adjust_down
+        self.increment_step_size = increment_step_size
+        self.decrement_step_size = decrement_step_size
+
         self.count = 0
 
         # Metrics to track when a user's bid is not adjusted due to user-value or being part of an over- and under-
         # served demographic
-
         self.gender_under_race_over = self.initialize_race_gender_count_dict()
         self.gender_over_race_under = self.initialize_race_gender_count_dict()
         self.missed_due_to_user_var = self.initialize_race_gender_count_dict()
         self.vrs_applied = self.initialize_race_gender_count_dict()
 
-    def update_vrs_related_parameters(self, vrs_ad_reach, total_no_of_users,
+    def update_vrs_related_parameters(self, vrs_multiplier_subgroup_map, vrs_ad_reach, total_no_of_users,
                                       metas_race_count, user_race_in_this_batch,
                                       target_race_count, true_race_count, race_var_sign,
                                       target_gender_count, gender_count, gender_var_sign,
@@ -130,27 +132,30 @@ class VarianceReductionSystem:
 
             # Update variance sign of each subgroup.
             if self.calc_race_var:
-                race_var_sign = self.update_variance_sign(
+                race_var_sign, vrs_multiplier_subgroup_map = self.update_variance_sign(
                     vrs_ad_reach=vrs_ad_reach,
                     count_dict=metas_race_count,
                     population_dist=target_race_count,
-                    total_no_of_users=total_no_of_users
+                    total_no_of_users=total_no_of_users,
+                    vrs_multiplier_subgroup_map=vrs_multiplier_subgroup_map
                 )
                 user_race_in_this_batch = {i[0]: 0 for i in constants.RACE}
 
             if self.calc_gender_var:
-                gender_var_sign = self.update_variance_sign(
+                gender_var_sign, vrs_multiplier_subgroup_map = self.update_variance_sign(
                     vrs_ad_reach=vrs_ad_reach,
                     count_dict=gender_count,
                     population_dist=target_gender_count,
-                    total_no_of_users=total_no_of_users
+                    total_no_of_users=total_no_of_users,
+                    vrs_multiplier_subgroup_map=vrs_multiplier_subgroup_map
                 )
 
             gender_race_var_sign = self.update_variance_sign(
                 vrs_ad_reach=vrs_ad_reach,
                 count_dict=gender_race_count,
                 population_dist=target_gender_race_count,
-                total_no_of_users=total_no_of_users
+                total_no_of_users=total_no_of_users,
+                vrs_multiplier_subgroup_map=vrs_multiplier_subgroup_map
             )
 
         return {
@@ -158,13 +163,21 @@ class VarianceReductionSystem:
             'race_var_sign': race_var_sign,
             'gender_var_sign': gender_var_sign,
             'gender_race_var_sign': gender_race_var_sign,
-            'user_race_in_this_batch': user_race_in_this_batch
+            'user_race_in_this_batch': user_race_in_this_batch,
+            'vrs_multiplier_subgroup_map': vrs_multiplier_subgroup_map
         }
 
-    @staticmethod
-    def update_variance_sign(vrs_ad_reach, count_dict, population_dist, total_no_of_users=1):
+    def update_variance_sign(self, vrs_ad_reach, count_dict, population_dist, vrs_multiplier_subgroup_map,
+                             total_no_of_users):
         """
-        population_dist is the demographic distribution of UNIQUE users served upto this point in the experiment.
+        2023-11-28: We are very unhappy about this setup:
+
+        1. If male users (resp. female users) are over-served then female users (resp. male users) are under-served so
+           binary groups will always be +/- the same amount.
+        2. If diff == 0 then we may just repeat the cycle. The VRS multiplier may need to be > 1 at steady state for
+           some demographic (e.g. to overcome competitive spillover)
+        3. Either we do a gradient descent-like proof and say there exists an optimal _fixed_ step size or we say
+           an adaptive approach is better.
         """
         _var_sign_dict = {}
         for demographic, count in population_dist.items():
@@ -172,12 +185,15 @@ class VarianceReductionSystem:
             _diff = count_dict[demographic] - exp_no_of_ads
             if _diff < 0:
                 _var_sign_dict[demographic] = -1
+                vrs_multiplier_subgroup_map[demographic] += self.increment_step_size
             elif _diff == 0:
                 _var_sign_dict[demographic] = 0
+                vrs_multiplier_subgroup_map[demographic] = 1
             else:
                 _var_sign_dict[demographic] = 1
+                vrs_multiplier_subgroup_map[demographic] -= self.increment_step_size
 
-        return _var_sign_dict
+        return _var_sign_dict, vrs_multiplier_subgroup_map
 
     @staticmethod
     def initialize_race_gender_count_dict():

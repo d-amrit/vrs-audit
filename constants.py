@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import itertools
 
 SAVE_PATH = '/Users/amrit/Documents/Code/VRS Audit/experimental_results/'
 if not os.path.exists(SAVE_PATH):
@@ -52,7 +53,7 @@ COMPLIANCE_REQUIREMENTS = [0.05, 0.1]
 HOUSING_BUDGET = 100
 
 SUPPORTED_AUCTION_TYPES = ['first', 'second', 'vcg', 'critical_bid']
-SUPPORTED_VOTING_RULES = ['min', 'max', 'average']
+SUPPORTED_VOTING_RULES = [min, max, np.mean]
 DEPRECATED_VOTING_RULES = ['AND-inclusive', 'AND-exclusive', 'OR', 'track-race-gender']
 PRIVILEGED_SUBGROUPS = [('Male', 'White'), ('Female', 'Black')]
 
@@ -63,7 +64,7 @@ OVER_UNDER_SERVED_MAP = {
     0: None,
     -1: 'under'
 }
-DEMOGRAPHICS_TRACKED = ['race', 'gender']
+DEMOGRAPHICS_TRACKED = ['gender', 'race']
 GROUPS_TO_SUBGROUPS = {
     'race': RACE_NAMES,
     'gender': GENDER_NAMES
@@ -74,3 +75,9 @@ SUBGROUP_FREQUENCY = {
     'Male': 0.5,
     'Female': 0.5
 }
+# Calculate frequency for cross-product of subgroups
+subgroups_by_char = [GROUPS_TO_SUBGROUPS[char] for char in DEMOGRAPHICS_TRACKED]
+subgroup_cross_product = [i for i in itertools.product(*subgroups_by_char)]
+for subgroup in subgroup_cross_product:
+    freq = np.prod([SUBGROUP_FREQUENCY[i] for i in subgroup])
+    SUBGROUP_FREQUENCY['-'.join(subgroup)] = freq

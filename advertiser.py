@@ -52,7 +52,7 @@ class Advertiser:
             self.race_var_sign[race[0]] = 0
 
         # TODO: Review. I think this is okay. Just read from constants.
-        self.vrs_multiplier = {subgroup: 1 for subgroup in constants.SUBGROUP_FREQUENCY.keys()}
+        self.vrs_multiplier_subgroup_map = {subgroup: 1 for subgroup in constants.SUBGROUP_FREQUENCY.keys()}
 
     def calc_user_based_bid(self, user):
         # TODO (2/2): Find cleaner way to allow them to vary their bid by user demographic.
@@ -166,3 +166,4 @@ class Advertiser:
             self.gender_var_sign = _p['gender_var_sign']
             self.gender_race_var_sign = _p['gender_race_var_sign']
             self.user_race_in_this_batch = _p['user_race_in_this_batch']
+            self.vrs_multiplier_subgroup_map = _p['vrs_multiplier_subgroup_map']
